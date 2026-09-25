@@ -1,0 +1,24 @@
+{
+  "name": "helpdesk-copilot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "sync": "node --env-file=.env scripts/sync.ts",
+    "ask": "node --env-file=.env scripts/ask.ts",
+    "eval": "node --env-file=.env scripts/eval.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "openai": "^7.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

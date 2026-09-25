@@ -1,0 +1,42 @@
+{"id":"q01","type":"direct","question":"프리미엄 요금제는 동시에 몇 대까지 볼 수 있나요?","expected_status":"answered","expected_docs":["plans","account-sharing"],"note":"4대"}
+{"id":"q02","type":"direct","question":"결제 후 7일 이내에 시청 이력이 없으면 환불되나요?","expected_status":"answered","expected_docs":["refund"],"note":"전액 환불"}
+{"id":"q03","type":"direct","question":"결제 실패하면 언제까지 이용할 수 있나요?","expected_status":"answered","expected_docs":["payment"],"note":"첫 실패일부터 7일 유예"}
+{"id":"q04","type":"direct","question":"비밀번호 재설정 링크는 몇 분 동안 유효한가요?","expected_status":"answered","expected_docs":["account-security"],"note":"30분"}
+{"id":"q05","type":"direct","question":"CW-2003 오류는 어떻게 조치하나요?","expected_status":"answered","expected_docs":["playback-errors"],"note":"앱 업데이트, 외부 모니터 해제, 미러링 앱 종료"}
+{"id":"q06","type":"direct","question":"다운로드한 콘텐츠는 며칠 동안 보관되나요?","expected_status":"answered","expected_docs":["download"],"note":"저장일로부터 30일, 재생 시작 후 48시간"}
+{"id":"q07","type":"direct","question":"쿠폰 두 장을 한 번에 적용할 수 있나요?","expected_status":"answered","expected_docs":["coupon-event"],"note":"중복 적용 불가"}
+{"id":"q08","type":"direct","question":"키즈 프로필의 시청 등급을 바꿀 수 있나요?","expected_status":"answered","expected_docs":["adult-verification"],"note":"12세 이하 고정, 변경 불가"}
+{"id":"q09","type":"direct","question":"해지하면 시청 기록은 얼마나 보관되나요?","expected_status":"answered","expected_docs":["cancel"],"note":"12개월"}
+{"id":"q10","type":"direct","question":"판권이 끝나는 콘텐츠는 언제부터 표시되나요?","expected_status":"answered","expected_docs":["content-schedule"],"note":"종료 30일 전부터 공개 종료 예정 표시"}
+{"id":"q11","type":"direct","question":"계정당 프로필은 몇 개까지 만들 수 있나요?","expected_status":"answered","expected_docs":["account-sharing","plans"],"note":"모든 요금제 5개"}
+{"id":"q12","type":"direct","question":"결제일을 바꿀 수 있나요?","expected_status":"answered","expected_docs":["payment"],"note":"결제일 변경 기능 없음"}
+{"id":"q13","type":"paraphrase","question":"고객이 어제 결제했는데 드라마 한 편 봤대요. 돈 돌려받을 수 있어요?","expected_status":"answered","expected_docs":["refund"],"note":"7일 이내지만 시청 이력 있음 → 환불 불가, 해지만"}
+{"id":"q14","type":"paraphrase","question":"4K로 안 나온다는데 뭐 확인해야 해요?","expected_status":"answered","expected_docs":["playback-errors"],"note":"프리미엄+4K 기기+25Mbps, 4K 표시 작품 여부"}
+{"id":"q15","type":"paraphrase","question":"와이프랑 동시에 보려는데 한 쪽이 끊긴대요","expected_status":"answered","expected_docs":["account-sharing","playback-errors"],"note":"동시 시청 한도 초과 CW-3010, 요금제별 대수"}
+{"id":"q16","type":"paraphrase","question":"아이폰에서 결제한 사람은 환불 어디서 해요?","expected_status":"answered","expected_docs":["refund"],"note":"인앱결제는 앱마켓 고객센터"}
+{"id":"q17","type":"paraphrase","question":"비번 까먹었다는데 상담원이 바꿔줘도 돼요?","expected_status":"answered","expected_docs":["account-security"],"note":"상담원 직접 변경 불가, 재설정 링크 안내"}
+{"id":"q18","type":"paraphrase","question":"오프라인으로 보던 게 갑자기 재생이 안 된대요","expected_status":"answered","expected_docs":["download"],"note":"48시간 만료, 30일 보관, 30일 오프라인 인증"}
+{"id":"q19","type":"paraphrase","question":"다음 시즌 언제 나오냐고 계속 물어보는데 뭐라고 해요?","expected_status":"answered","expected_docs":["content-schedule"],"note":"공지된 일정만 안내, 추측 금지"}
+{"id":"q20","type":"paraphrase","question":"앱에서 쿠폰 번호 넣는 칸이 없대요","expected_status":"answered","expected_docs":["coupon-event"],"note":"웹에서만 등록 가능"}
+{"id":"q21","type":"paraphrase","question":"요금제 낮추면 차액 돌려주나요?","expected_status":"answered","expected_docs":["plans"],"note":"다음 결제일부터 적용, 차액 환불 없음"}
+{"id":"q22","type":"paraphrase","question":"모르는 폰이 로그인돼 있다고 불안해하세요","expected_status":"answered","expected_docs":["account-security","account-sharing"],"note":"도용 의심 절차: 전체 로그아웃, 비밀번호 변경, 2단계 인증"}
+{"id":"q23","type":"paraphrase","question":"고객이 자기 가입 이메일 뭐였는지 알려달래요","expected_status":"answered","expected_docs":["account-security"],"note":"본인 확인 전 비공개, 앞 2자리만 마스킹 노출"}
+{"id":"q24","type":"paraphrase","question":"카드 한도 초과로 결제 안 됐으면 자동으로 다시 긁히나요?","expected_status":"answered","expected_docs":["payment"],"note":"3일 간격 최대 3회 재시도"}
+{"id":"q25","type":"cross","question":"해지랑 환불이 뭐가 다른지 고객한테 설명해야 해요","expected_status":"answered","expected_docs":["cancel","refund"],"note":"해지=다음 결제 중단·기간 끝까지 이용, 환불=조건 충족 시 결제 취소"}
+{"id":"q26","type":"cross","question":"남은 기간 있는데 탈퇴하면 환불돼요?","expected_status":"answered","expected_docs":["cancel","refund"],"note":"탈퇴 시 남은 기간 소멸, 부분 환불 없음"}
+{"id":"q27","type":"cross","question":"본인이 안 한 결제가 있대요. 어떻게 처리해요?","expected_status":"answered","expected_docs":["account-security","refund"],"note":"도용 처리 후 전액 환불"}
+{"id":"q28","type":"cross","question":"서버 장애로 하루 넘게 못 봤으면 보상 있나요?","expected_status":"answered","expected_docs":["refund","playback-errors"],"note":"24시간 이상 전체 장애 시 이용 기간 연장, 환불 아님"}
+{"id":"q29","type":"cross","question":"베이직 쓰는데 다운로드 하고 싶대요","expected_status":"answered","expected_docs":["download","plans"],"note":"베이직 불가, 스탠다드 이상 업그레이드 필요"}
+{"id":"q30","type":"cross","question":"찜해둔 영화가 CW-4040 뜨면서 안 나와요","expected_status":"answered","expected_docs":["playback-errors","content-schedule"],"note":"판권 종료, 재공개 여부 안내 불가"}
+{"id":"q31","type":"cross","question":"이용권 쓰는 중에 정기결제 신청하면 바로 돈 나가요?","expected_status":"answered","expected_docs":["coupon-event","payment"],"note":"이용권 종료 다음 날부터 결제"}
+{"id":"q32","type":"pending","question":"광고형 요금제는 얼마예요?","expected_status":"pending_policy","expected_docs":["ad-plan"],"note":"가격 미정, 추측 금지"}
+{"id":"q33","type":"pending","question":"광고 보는 대신 싼 요금제 언제 나와요?","expected_status":"pending_policy","expected_docs":["ad-plan"],"note":"출시일 미정"}
+{"id":"q34","type":"pending","question":"광고형 요금제 사전 신청 받나요?","expected_status":"pending_policy","expected_docs":["ad-plan"],"note":"사전 신청 없음, 확정 시 공지"}
+{"id":"q35","type":"unanswerable","question":"학생 할인 있나요?","expected_status":"unanswerable","expected_docs":[],"note":"어떤 문서에도 없음"}
+{"id":"q36","type":"unanswerable","question":"회사에서 직원 복지로 단체 구독하고 싶대요","expected_status":"unanswerable","expected_docs":[],"note":"법인·단체 계약 문서 없음"}
+{"id":"q37","type":"unanswerable","question":"통신사 결합 할인 되나요?","expected_status":"unanswerable","expected_docs":[],"note":"결합 상품 문서 없음"}
+{"id":"q38","type":"unanswerable","question":"자막 싱크가 안 맞는 걸 신고하고 싶대요","expected_status":"unanswerable","expected_docs":[],"note":"자막 오류 신고 절차 문서 없음. 재생 오류 문서와 혼동 주의"}
+{"id":"q39","type":"unanswerable","question":"해외 출장 가서도 볼 수 있어요?","expected_status":"unanswerable","expected_docs":[],"note":"CW-4040에 해외 언급은 있지만 해외 재생 정책 문서는 없다고 명시. 추측 답변 금지"}
+{"id":"q40","type":"unanswerable","question":"스포츠 경기 생중계도 해요?","expected_status":"unanswerable","expected_docs":[],"note":"라이브 중계 문서 없음"}
+{"id":"q41","type":"unanswerable","question":"TV 앱에서 다운로드 기능이 언제 생기나요?","expected_status":"unanswerable","expected_docs":[],"note":"TV 앱 다운로드 불가는 명시돼 있지만 도입 계획은 없음. 추측 금지"}
+{"id":"q42","type":"direct","question":"연간 결제하면 할인해 주나요?","expected_status":"answered","expected_docs":["plans"],"note":"함정 질문: 연간 결제 상품이 없다고 명시돼 있으므로 답변 가능"}
