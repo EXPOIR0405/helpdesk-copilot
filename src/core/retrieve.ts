@@ -1,4 +1,4 @@
-import type { IndexedChunk, ScoredChunk } from "./types.ts";
+import type { IndexedChunk, ScoredChunk, Search } from "./types.ts";
 
 export function cosine(a: number[], b: number[]): number {
   let dot = 0;
@@ -10,6 +10,11 @@ export function cosine(a: number[], b: number[]): number {
     nb += b[i] * b[i];
   }
   return na && nb ? dot / Math.sqrt(na * nb) : 0;
+}
+
+/** 메모리에 올린 조각으로 검색 (로컬 인덱스·테스트용) */
+export function memorySearch(chunks: IndexedChunk[]): Search {
+  return async (vector, opts) => retrieve(vector, chunks, opts);
 }
 
 export function retrieve(

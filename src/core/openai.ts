@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { buildInput, INSTRUCTIONS, VERDICT_SCHEMA } from "./prompt.ts";
+import type { ReplyGenerator } from "./reply.ts";
 import type { Embedder, Generator, ModelVerdict } from "./types.ts";
 
 export function openAIEmbedder(client: OpenAI, model: string): Embedder {
@@ -21,5 +22,12 @@ export function openAIGenerator(client: OpenAI, model: string): Generator {
       },
     });
     return JSON.parse(res.output_text) as ModelVerdict;
+  };
+}
+
+export function openAIReplyGenerator(client: OpenAI, model: string): ReplyGenerator {
+  return async (instructions, input) => {
+    const res = await client.responses.create({ model, instructions, input, reasoning: { effort: "low" } });
+    return res.output_text;
   };
 }

@@ -1,0 +1,20 @@
+{
+  "at": "2026-09-25T17:30:28.804Z",
+  "total": 42,
+  "retrievalHit": {
+    "n": 34,
+    "d": 35
+  },
+  "statusAccuracy": {
+    "n": 40,
+    "d": 42
+  },
+  "wrongAnswer": {
+    "n": 0,
+    "d": 10
+  },
+  "overRefusal": {
+    "n": 2,
+    "d": 32
+  }
+}

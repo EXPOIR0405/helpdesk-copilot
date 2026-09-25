@@ -7,3 +7,4 @@ data/index/
 data/logs/
 coverage/
 .DS_Store
+.vercel/

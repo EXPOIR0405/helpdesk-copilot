@@ -1,17 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { config } from "../src/config.ts";
-import type { Answer, AnswerStatus } from "../src/core/types.ts";
+import { summarizeEval, type EvalRow } from "../src/core/report.ts";
 import { memoryUnansweredLog } from "../src/core/unanswered.ts";
 import { createRuntime } from "../src/runtime.ts";
 
-type EvalQuestion = {
-  id: string;
-  type: string;
-  question: string;
-  expected_status: AnswerStatus;
-  expected_docs: string[];
-  note: string;
-};
+type EvalQuestion = EvalRow["q"] & { note: string };
 
 const questions: EvalQuestion[] = (await readFile("data/synthetic/eval/questions.jsonl", "utf8"))
   .split("\n")
@@ -21,7 +14,7 @@ const questions: EvalQuestion[] = (await readFile("data/synthetic/eval/questions
 // 평가 질문이 운영 미답변 리포트에 섞이지 않게 메모리 로그 사용
 const { copilot } = await createRuntime({ log: memoryUnansweredLog() });
 
-const results: { q: EvalQuestion; a: Answer }[] = [];
+const results: EvalRow[] = [];
 const queue = [...questions];
 await Promise.all(
   Array.from({ length: 4 }, async () => {
@@ -31,21 +24,15 @@ await Promise.all(
 results.sort((x, y) => x.q.id.localeCompare(y.q.id));
 
 const pct = (n: number, d: number) => (d ? `${((n / d) * 100).toFixed(1)}% (${n}/${d})` : "-");
-const withDocs = results.filter((r) => r.q.expected_docs.length);
-const retrievalHits = withDocs.filter((r) => r.a.trace.retrieved.some((h) => r.q.expected_docs.includes(h.docId)));
-const statusOk = results.filter((r) => r.a.status === r.q.expected_status);
-const shouldNotAnswer = results.filter((r) => r.q.expected_status !== "answered");
-const wrongAnswers = shouldNotAnswer.filter((r) => r.a.status === "answered");
-const shouldAnswer = results.filter((r) => r.q.expected_status === "answered");
-const overRefusals = shouldAnswer.filter((r) => r.a.status === "unanswerable");
+const summary = summarizeEval(results, new Date());
 
 console.log(`모델: ${config.models.generation} / ${config.models.embedding}`);
 console.log(`임계값: minScore ${config.retrieval.minScore}, high ${config.confidence.high}, medium ${config.confidence.medium}\n`);
 console.log(`| 지표 | 값 |\n|---|---|`);
-console.log(`| 검색 적중률 (top ${config.retrieval.topK}) | ${pct(retrievalHits.length, withDocs.length)} |`);
-console.log(`| 상태 정확도 | ${pct(statusOk.length, results.length)} |`);
-console.log(`| 잘못된 답변률 (답하면 안 되는 질문에 답함) | ${pct(wrongAnswers.length, shouldNotAnswer.length)} |`);
-console.log(`| 과잉 거절률 (답할 수 있는데 거절) | ${pct(overRefusals.length, shouldAnswer.length)} |`);
+console.log(`| 검색 적중률 (top ${config.retrieval.topK}) | ${pct(summary.retrievalHit.n, summary.retrievalHit.d)} |`);
+console.log(`| 상태 정확도 | ${pct(summary.statusAccuracy.n, summary.statusAccuracy.d)} |`);
+console.log(`| 잘못된 답변률 (답하면 안 되는 질문에 답함) | ${pct(summary.wrongAnswer.n, summary.wrongAnswer.d)} |`);
+console.log(`| 과잉 거절률 (답할 수 있는데 거절) | ${pct(summary.overRefusal.n, summary.overRefusal.d)} |`);
 
 const byType = new Map<string, { ok: number; n: number }>();
 for (const r of results) {
@@ -69,4 +56,6 @@ if (misses.length) {
 await mkdir("data/logs", { recursive: true });
 const out = `data/logs/eval-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
 await writeFile(out, JSON.stringify(results, null, 2));
-console.log(`\n상세 결과: ${out}`);
+// 운영 화면 품질 지표용. 저장소에 커밋되는 요약
+await writeFile("data/eval-summary.json", JSON.stringify(summary, null, 2) + "\n");
+console.log(`\n상세 결과: ${out}\n요약: data/eval-summary.json`);

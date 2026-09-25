@@ -11,13 +11,18 @@
     "ask": "node --env-file=.env scripts/ask.ts",
     "eval": "node --env-file=.env scripts/eval.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "mock": "node --env-file-if-exists=.env scripts/build-mock.ts",
+    "dev": "node --env-file-if-exists=.env scripts/dev.ts",
+    "build": "node scripts/build.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "openai": "^7.23.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   }

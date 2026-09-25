@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CineWave 상담 코파일럿</title>
+  <meta name="description" content="가상 OTT 서비스 CineWave 고객센터 상담원용 정책 답변 코파일럿 데모" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip" href="#main">본문으로 건너뛰기</a>
+
+  <header class="topbar">
+    <div class="topbar__inner">
+      <a class="brand" href="#/" aria-label="CineWave 상담 코파일럿 홈">
+        <span class="brand__mark" aria-hidden="true"></span>
+        <span class="brand__name">CineWave</span>
+        <span class="brand__product">상담 코파일럿</span>
+      </a>
+      <nav class="tabs" aria-label="화면">
+        <a class="tabs__link" href="#/" data-route="agent">상담</a>
+        <a class="tabs__link" href="#/ops" data-route="ops">운영</a>
+      </nav>
+      <span class="demo-badge" title="가상 회사·가상 정책으로 만든 데모입니다">데모 · 가상 데이터</span>
+    </div>
+  </header>
+
+  <main id="main" class="page">
+    <!-- 상담원 화면 -->
+    <section id="view-agent" class="view" aria-labelledby="agent-title">
+      <div class="agent">
+        <div class="agent__main">
+          <h1 id="agent-title" class="visually-hidden">상담원 화면</h1>
+
+          <form id="ask-form" class="ask" autocomplete="off">
+            <label for="question" class="ask__label">고객 문의</label>
+            <div class="ask__box">
+              <textarea id="question" name="question" rows="2" maxlength="300"
+                placeholder="고객이 물어본 내용을 그대로 붙여 넣으세요"
+                aria-describedby="ask-hint"></textarea>
+              <button id="ask-submit" class="btn btn--primary ask__submit" type="submit">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
+                <span>답변 찾기</span>
+              </button>
+            </div>
+            <p id="ask-hint" class="ask__hint">Enter로 전송 · Shift+Enter 줄바꿈 · 최대 300자</p>
+          </form>
+
+          <div class="examples" aria-labelledby="examples-title">
+            <p id="examples-title" class="examples__title">예시 질문</p>
+            <ul class="examples__list" id="examples"></ul>
+          </div>
+
+          <p id="mock-note" class="mock-note" hidden></p>
+
+          <div id="result" class="result" aria-live="polite" aria-busy="false">
+            <div class="empty">
+              <p class="empty__title">정책 문서에 근거한 답변만 보여줍니다</p>
+              <p class="empty__body">근거가 없으면 답을 지어내지 않고 "근거 없음"으로 알려드려요. 준비 중인 정책은 확정처럼 안내하지 않도록 따로 표시합니다.</p>
+            </div>
+          </div>
+        </div>
+
+        <aside class="agent__aside" aria-labelledby="trace-title">
+          <div class="panel">
+            <h2 id="trace-title" class="panel__title">검색 추적</h2>
+            <div id="trace" class="trace">
+              <p class="muted">질문을 보내면 어떤 문서 조각을 찾았고 어떤 조각을 근거로 썼는지 여기에 표시됩니다.</p>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- 운영 화면 -->
+    <section id="view-ops" class="view" aria-labelledby="ops-title" hidden>
+      <div class="ops">
+        <div class="ops__head">
+          <h1 id="ops-title" class="h1">운영 현황</h1>
+          <p class="muted">답하지 못한 질문을 문서별로 모아, 어떤 문서를 보강할지 보여줍니다. 데모에서는 읽기 전용입니다.</p>
+        </div>
+
+        <div id="ops-stats" class="stats"></div>
+
+        <div class="ops__grid">
+          <section class="panel" aria-labelledby="unanswered-title">
+            <div class="panel__head">
+              <h2 id="unanswered-title" class="panel__title">미답변·저확신 질문</h2>
+              <p class="panel__sub">가장 가까웠던 문서 기준으로 묶음 · 건수 순</p>
+            </div>
+            <div id="unanswered"></div>
+          </section>
+
+          <div class="ops__side">
+            <section class="panel" aria-labelledby="quality-title">
+              <div class="panel__head">
+                <h2 id="quality-title" class="panel__title">품질 지표</h2>
+                <p class="panel__sub" id="quality-sub"></p>
+              </div>
+              <dl id="quality" class="quality"></dl>
+            </section>
+
+            <section class="panel" aria-labelledby="docs-title">
+              <div class="panel__head">
+                <h2 id="docs-title" class="panel__title">정책 문서</h2>
+                <p class="panel__sub" id="docs-sub"></p>
+              </div>
+              <div class="table-wrap">
+                <table class="table" id="docs">
+                  <thead><tr><th scope="col">문서</th><th scope="col">상태</th><th scope="col" class="num">수정일</th><th scope="col" class="num">조각</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="mock-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

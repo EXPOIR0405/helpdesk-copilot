@@ -59,4 +59,7 @@ export type ModelVerdict = {
   citedChunkIds: string[];
 };
 
+/** 질문 벡터로 가까운 조각을 찾음. 로컬은 메모리 코사인, 배포는 pgvector (같은 코사인 계산) */
+export type Search = (vector: number[], opts: { topK: number; minScore: number }) => Promise<ScoredChunk[]>;
+
 export type Generator = (question: string, chunks: ScoredChunk[]) => Promise<ModelVerdict>;

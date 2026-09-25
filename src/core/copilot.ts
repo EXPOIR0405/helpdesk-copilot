@@ -1,14 +1,12 @@
 import { decideConfidence } from "./confidence.ts";
-import { retrieve } from "./retrieve.ts";
-import type { DocIndex } from "./sync.ts";
-import type { Answer, Citation, Embedder, Generator, ScoredChunk } from "./types.ts";
+import type { Answer, Citation, Embedder, Generator, ScoredChunk, Search } from "./types.ts";
 import type { UnansweredLog } from "./unanswered.ts";
 
 export const NOT_FOUND_TEXT =
   "등록된 정책 문서에서 근거를 찾지 못했습니다. 추측해서 안내하지 말고 담당자에게 확인해 주세요.";
 
 export type CopilotDeps = {
-  index: DocIndex;
+  search: Search;
   embed: Embedder;
   generate: Generator;
   log: UnansweredLog;
@@ -24,7 +22,7 @@ export function createCopilot(deps: CopilotDeps) {
     async ask(question: string): Promise<Answer> {
       const q = question.trim();
       const [vector] = await deps.embed([q]);
-      const hits = retrieve(vector, deps.index.chunks, deps.retrieval);
+      const hits = await deps.search(vector, deps.retrieval);
       const topScore = hits[0]?.score ?? 0;
       const retrieved = hits.map((h) => ({ chunkId: h.id, docId: h.docId, score: h.score }));
 

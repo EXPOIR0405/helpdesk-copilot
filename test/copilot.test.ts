@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createCopilot, NOT_FOUND_TEXT } from "../src/core/copilot.ts";
 import { parseDoc } from "../src/core/docs.ts";
+import { memorySearch } from "../src/core/retrieve.ts";
 import { syncIndex } from "../src/core/sync.ts";
 import type { Generator, ModelVerdict } from "../src/core/types.ts";
 import { groupByNearestDoc, memoryUnansweredLog } from "../src/core/unanswered.ts";
@@ -22,7 +23,7 @@ async function setup(verdict: Partial<ModelVerdict> | ((ids: string[]) => Partia
   });
   const log = memoryUnansweredLog();
   const copilot = createCopilot({
-    index,
+    search: memorySearch(index.chunks),
     embed,
     generate,
     log,

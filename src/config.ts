@@ -20,6 +20,15 @@ export const config = {
     high: 0.5,
     medium: 0.35,
   },
+  // 공개 데모 비용 방어
+  limits: {
+    questionMaxChars: 300,
+    perIpPerMinute: 6,
+    // 모델을 실제로 부르는 요청(답변·답장) 하루 전체 상한. 넘으면 화면이 목업 모드로 전환
+    dailyModelCalls: 300,
+    // 같은 질문은 이 시간 동안 저장된 답변 재사용
+    answerCacheHours: 24,
+  },
 } as const;
 
 export type Config = typeof config;

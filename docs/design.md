@@ -140,6 +140,24 @@ type Answer = {
 - 확신도 낮음·거절 질문을 JSONL로 기록 (질문, 시각, 최고 유사도, 가장 가까운 문서)
 - 운영 화면에서 가장 가까운 문서 기준으로 묶어 표시 → "어느 문서를 보강할지" 바로 보임
 
+### 고객 답장 초안
+
+- 흐름: 상담원용 답변(내부 확인) → 버튼을 누르면 전용 내장 프롬프트로 고객에게 보낼 답장 초안 생성
+- 두 단계로 나눈 이유
+  - 상담원 답변은 정확성·근거 확인용, 고객 답장은 표현·말투용. 한 번에 시키면 둘 다 흐려짐
+  - 상담원이 근거를 확인한 뒤에만 고객 문장이 만들어짐
+- 입력은 확인된 답변 + 인용 근거만. 원 문서 전체나 검색 결과는 넘기지 않음
+- 프롬프트 규칙
+  - 확인된 답변·근거에 있는 사실만 사용. 수치·일정·절차 추가 금지, 근거 없는 시점 약속 금지
+  - 상태별 작성: 확정은 결론 먼저, 준비 중은 "확정되면 공지로 안내"만, 근거 없음은 보류 답장
+  - 문서 이름·조각 번호·"상담원" 같은 내부 표현을 고객 관점 문장으로 바꿈
+  - 상담원 메모 말투("~래요")를 고객에게 직접 하는 말로 바꿈
+  - 마크다운 금지, 5문장 안팎
+- 코드 가드: 답장에 나온 숫자 중 확인된 답변·근거에 없는 것을 찾아 경고 (번호 목록 머리는 제외)
+- 버튼을 누를 때만 생성 → 모든 질문에 호출이 두 배가 되는 것 방지
+- 웹 API는 `answerId`로만 답장 요청을 받음. 클라이언트가 보낸 임의 텍스트를 모델에 넣지 않기 위함
+- 초안은 편집 가능한 입력창으로 보여주고, 보내기 전 확인 문구 표시
+
 ### 모델
 
 - 생성·임베딩 모두 OpenAI API (`openai` 공식 SDK)
@@ -149,11 +167,31 @@ type Answer = {
 
 ### 공개 데모 비용 방어
 
-- IP당 분당 요청 수 제한
-- 일일 전체 호출 상한 도달 시 데모 모드 안내로 전환
-- 질문 길이 상한
-- 동일 질문 답변 캐시
-- API 키는 서버에만 보관
+- IP당 분당 요청 수 제한 (6회)
+- 하루 전체 모델 호출 상한 (300회). 넘으면 화면이 목업 모드로 전환하고 이유를 표시
+  - 캐시 적중은 모델을 부르지 않으므로 상한에 포함하지 않음
+- 질문 길이 상한 (300자)
+- 같은 질문 24시간 캐시: 띄어쓰기·끝 문장부호 차이는 같은 질문으로 봄
+- 고객 답장 초안은 버튼을 누를 때만 생성, 한 번 만든 초안은 저장해 재사용
+- API 키는 서버에만 보관. OpenAI 대시보드 사용 한도를 함께 설정
+
+### 배포와 저장소
+
+- Vercel(화면·API) + Supabase(Postgres + pgvector)
+- 서버리스는 파일이 남지 않으므로 인덱스·미답변·답변 캐시·호출 제한을 모두 DB로
+- 저장소 선택: `SUPABASE_URL`·`SUPABASE_SECRET_KEY`가 있으면 Supabase, 없으면 로컬 파일·메모리
+  - core는 `Search`, `IndexRepo`, `UnansweredLog` 인터페이스에만 의존 → 테스트·CLI·배포가 같은 로직
+- 검색: Supabase `match_chunks` 함수. 로컬 메모리 검색과 같은 코사인 계산 → 평가 결과가 배포에도 그대로 유효
+  - 조각 수십 개 규모라 벡터 인덱스 없이 전수 비교
+- 동기화: `npm run sync`가 해시 비교로 바뀐 문서만 Supabase에 반영
+- 보안: 모든 테이블 RLS를 켜고 정책을 두지 않음, 함수 실행 권한은 서버 역할만 → 공개 키로는 접근 불가
+- 답장 요청은 `answerId`로만 받음. 서버에 저장된 답변만 모델에 들어감
+- 일시정지 방지: Supabase 무료 프로젝트는 약 7일간 요청이 없으면 일시정지
+  - Vercel Cron이 하루 한 번 `/api/keepalive` 호출 → 가벼운 조회로 DB를 깨워 두고 지난 호출 제한 기록 정리
+  - `CRON_SECRET` 헤더가 맞을 때만 실행
+  - 그래도 DB에 닿지 못하면 화면이 목업 모드로 전환 → 데모 링크가 깨지지 않음
+- 빌드: esbuild로 API를 번들해 Vercel Build Output API 형식(`.vercel/output`)으로 직접 생성
+  - 소스의 `.ts` 확장자 import를 Vercel 자동 빌드에 맡기지 않기 위함
 
 ## 7. 평가
 
@@ -172,6 +210,7 @@ type Answer = {
 - 질문 입력창과 예시 질문 버튼 (처음 방문자용)
 - 답변 카드: 본문, 확신도 배지, 상태 표시(준비 중·답변 불가)
 - 근거 조각 펼쳐보기: 문서 제목, 인용 문장
+- 고객 답장 만들기(근거 없음이면 보류 답장 만들기) → 편집 가능한 초안, 근거 밖 숫자 경고, 복사
 
 ### 운영 화면
 
@@ -179,17 +218,35 @@ type Answer = {
 - 문서 동기화 상태: 문서 목록, 상태(확정/준비 중), 마지막 동기화 시각
 - 데모에서는 읽기 전용
 
+### 디자인 원칙
+
+- 업무 도구 톤: 무채색 바탕, 색은 답변 상태에만 사용 (확정 초록 · 준비 중 주황 · 근거 없음 빨강)
+- 상태는 색만으로 구분하지 않음: 아이콘 + 라벨 + 상담원이 할 행동 한 줄
+- 확신도는 확정 답변에만 표시. 낮으면 "인용 원문을 직접 확인" 경고
+- 근거 문서는 기본으로 펼침. 근거를 보여주는 것이 신뢰의 핵심
+- 검색 추적 패널: 검색된 조각과 유사도, 실제 근거로 쓴 조각을 구분해 표시 (포트폴리오 방문자가 동작 원리를 볼 수 있게)
+- 예시 질문 칩은 세 상태가 모두 나오도록 구성, 칩 점 색으로 결과 상태 예고
+- 라이트 모드 고정 (업무 화면 기준), 모바일(단일 열), 키보드 포커스, 동작 줄이기 설정 대응
+- 한글 입력 조합 중 Enter는 전송하지 않음
+
 ### 구현 방식
 
-- Node 내장 HTTP 서버 + 정적 HTML·바닐라 JS
+- 정적 HTML·바닐라 JS (`src/web/public/`) + 표준 Request/Response 핸들러 하나 (`src/server/api.ts`)
+  - 같은 핸들러를 로컬 개발 서버(`npm run dev`)와 Vercel 함수가 공유
 - 프레임워크를 추가하지 않아 의존성을 최소로 유지
+- API: `POST /api/ask` → `{ answer, answerId }`, `POST /api/reply` (`answerId`) → 답장 초안, `GET /api/ops` → 문서·미답변 묶음·평가 지표
+- 목업 모드: API가 없으면(파일로 열기, 정적 호스팅) `mock-data.js`로 동작
+  - `npm run mock`: 평가 결과(실제 모델 응답)로 목업 데이터 생성. API 키가 있으면 고객 답장 초안도 실제 모델로 만들어 캐시
+  - 자유 입력은 가장 비슷한 평가 문항의 응답을 보여주고 그 사실을 화면에 표시
+  - API 키 없이 볼 수 있는 데모 → 비용 방어의 1차 수단
+- `?q=질문` 링크로 바로 질문, `&reply=1`이면 답장 초안까지 (데모 링크 공유용)
 
 ## 9. 기술 스택
 
-- TypeScript, Node 22 (타입 스트리핑으로 빌드 없이 실행)
-- `openai`, `@slack/bolt`
-- vitest
-- Docker (배포처는 데모 단계에서 결정. 미답변 로그 보존을 위해 볼륨 지원 여부 확인)
+- TypeScript, Node 22 (로컬은 타입 스트리핑으로 빌드 없이 실행)
+- `openai`, `@supabase/supabase-js`, `@slack/bolt`
+- Vercel (Functions, Cron), Supabase (Postgres, pgvector)
+- esbuild (배포 번들), vitest
 
 ## 10. 저장소 구조
 
@@ -198,13 +255,15 @@ type Answer = {
 /architecture.md           다이어그램 + 설계 결정 이유 + 평가 결과
 /docs/design.md            이 문서
 /docs/lessons.md           설계·운영하며 배운 것
-/src/core/                 sync, chunk, embed, retrieve, answer, confidence, unanswered
-/src/adapters/web/         HTTP 서버, 정적 페이지, 요청 제한
+/src/core/                 sync, chunk, retrieve, copilot, confidence, reply, report, unanswered
+/src/server/               API 핸들러, 저장소(Supabase·메모리), Vercel 진입점
+/src/web/public/           정적 화면
+/supabase/migrations/      DB 스키마
 /src/adapters/slack/       Bolt 앱
 /src/config.ts             모델 ID, 임계값, 제한값
 /data/synthetic/docs/      시네웨이브 정책 문서
 /data/synthetic/eval/      평가 질문셋
-/scripts/                  sync, eval 실행 스크립트
+/scripts/                  sync, ask, eval, mock, dev, build
 /test/
 ```
 
@@ -223,7 +282,7 @@ type Answer = {
 |---|---|---|
 | 1 | 샘플 문서·평가셋 작성 | 문서 12개, 질문 42개 |
 | 2 | core 구현 (sync → retrieve → answer → confidence → unanswered) | 단위 테스트 통과, `npm run eval` 동작 |
-| 3 | 웹 어댑터 + 비용 방어 | 로컬에서 두 화면 동작 |
+| 3 | 웹 화면 + API + 비용 방어 + Supabase 저장소 | 로컬에서 두 화면 동작, Supabase 대상 평가 결과가 로컬과 같음 |
 | 4 | 평가 기반 임계값 조정 | 결과표 `architecture.md` 반영 |
-| 5 | 배포 + README·GIF | 공개 URL 동작 |
+| 5 | Vercel 배포 + README·GIF | 공개 URL 동작, keepalive Cron 동작 |
 | 6 | Slack 어댑터 | 같은 질문에 웹과 같은 답 |

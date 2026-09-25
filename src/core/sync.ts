@@ -60,6 +60,17 @@ export async function syncIndex(input: {
   };
 }
 
+/** 인덱스 저장소. 로컬은 JSON 파일, 배포는 Supabase */
+export type IndexRepo = {
+  load(): Promise<DocIndex | null>;
+  /** stats를 보고 바뀐 문서만 쓰는 구현도 있으므로 함께 넘김 */
+  save(index: DocIndex, stats: SyncStats): Promise<void>;
+};
+
+export function fileIndexRepo(path: string): IndexRepo {
+  return { load: () => loadIndex(path), save: (index) => saveIndex(path, index) };
+}
+
 export async function loadIndex(path: string): Promise<DocIndex | null> {
   try {
     return JSON.parse(await readFile(path, "utf8")) as DocIndex;
