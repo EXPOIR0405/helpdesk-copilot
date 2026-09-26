@@ -15,6 +15,7 @@ function getApi() {
       answers: runtime.backend.answers,
       quota: runtime.backend.quota,
       ops: runtime.ops,
+      policyDocs: runtime.policyDocs,
       keepalive: runtime.backend.keepalive,
       limits: config.limits,
       cronSecret: process.env.CRON_SECRET,

@@ -40,8 +40,10 @@ const ICON = {
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-// 모델 답변의 **강조**만 살림. 이스케이프 후 적용해서 HTML 주입 없음
-const richText = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+// 인라인 코드가 문서 id면(`refund` 문서 참고) 정책 문서 탭 링크로
+const docLink = (code) => (docMeta[code] ? `<a class="doc-ref" href="#/docs/${encodeURIComponent(code)}">${esc(docMeta[code].title)}</a>` : null);
+const md = (text, opts = {}) => window.renderMarkdown(text, { codeLink: docLink, ...opts });
+const docHref = (docId, section) => `#/docs/${encodeURIComponent(docId)}${section ? `?s=${encodeURIComponent(section)}` : ""}`;
 const icon = (paths, cls = "") => `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true">${paths}</svg>`;
 const fmtTime = (iso) => {
   const p = Object.fromEntries(
@@ -117,26 +119,38 @@ const api = {
       ? new Promise((r) => setTimeout(() => r(ctx.mockReply ?? { text: "목업 데이터에 이 답변의 초안이 없습니다. npm run mock 을 API 키와 함께 실행하세요.", unsupportedNumbers: [] }), 500))
       : fetchJson("/api/reply", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ answerId: ctx.answerId, fresh: !!ctx.fresh }) }),
   ops: () => withFallback(() => fetchJson("/api/ops"), async () => mock.ops),
+  docs: () => withFallback(() => fetchJson("/api/docs"), async () => mock.docs),
 };
 
 /* ── 라우팅 ───────────────────────────── */
 
+/** #/ · #/docs · #/docs/<문서id>?s=<섹션> · #/ops */
+function parseHash() {
+  const [path, query = ""] = location.hash.slice(1).split("?");
+  const parts = path.split("/").filter(Boolean);
+  const name = parts[0] === "ops" ? "ops" : parts[0] === "docs" ? "docs" : "agent";
+  return { name, docId: parts[1] ? decodeURIComponent(parts[1]) : null, section: new URLSearchParams(query).get("s") };
+}
+
 function route() {
-  const name = location.hash === "#/ops" ? "ops" : "agent";
-  $("#view-agent").hidden = name !== "agent";
-  $("#view-ops").hidden = name !== "ops";
+  const { name, docId, section } = parseHash();
+  for (const v of ["agent", "docs", "ops"]) $(`#view-${v}`).hidden = name !== v;
   for (const a of document.querySelectorAll(".tabs__link")) {
     if (a.dataset.route === name) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   }
-  document.title = `${name === "ops" ? "운영 현황" : "상담"} · CineWave 상담 코파일럿`;
+  document.title = `${{ ops: "운영 현황", docs: "정책 문서", agent: "상담" }[name]} · CineWave 상담 코파일럿`;
   if (name === "ops") renderOps();
+  if (name === "docs") renderDocs(docId, section);
 }
 
 /* ── 상담원 화면 ──────────────────────── */
 
 let docMeta = {};
-const setDocMeta = (ops) => (docMeta = Object.fromEntries(ops.docs.map((d) => [d.id, d])));
+const setDocMeta = (ops) => {
+  for (const d of ops.docs) docMeta[d.id] = { ...docMeta[d.id], ...d };
+};
+const sectionId = (text) => `sec-${text.trim().replace(/\s+/g, "-")}`;
 let asking = false;
 let current = null; // 지금 화면의 답변. 고객 답장 만들 때 사용
 
@@ -160,7 +174,8 @@ async function ask(question) {
   $("#mock-note").hidden = true;
 
   try {
-    const { answer, answerId, mockReply, matched } = await api.ask(question);
+    // 문서 제목을 알아야 근거 안의 문서 참조가 링크로 바뀜. 실패해도 답변은 보여줌
+    const [{ answer, answerId, mockReply, matched }] = await Promise.all([api.ask(question), loadDocs().catch(() => null)]);
     current = { question, answer, answerId, mockReply };
     renderAnswer(question, answer);
     renderTrace(answer);
@@ -210,7 +225,7 @@ function renderAnswer(question, a) {
         <div><p class="answer__status-label">${st.label}</p><p class="answer__status-guide">${st.guide}</p></div>
       </div>
       <p class="answer__question">Q. ${esc(question)}</p>
-      <div class="answer__body">${richText(a.text)}</div>
+      <div class="answer__body md">${md(a.text)}</div>
       ${meta}
       ${cites}
     </article>`;
@@ -255,8 +270,9 @@ function renderCite(c) {
   return `<li class="cite">
     <div class="cite__head">${icon(ICON.doc)}<span>${esc(c.title)} <span class="cite__path">› ${esc(c.section)}</span></span>
       ${pending ? '<span class="pill pill--pending">준비 중</span>' : ""}
-      <span class="cite__id">${esc(c.chunkId)}</span></div>
-    <p class="cite__text">${esc(c.excerpt)}</p>
+      <span class="cite__id">${esc(c.chunkId)}</span>
+      <a class="cite__open" href="${docHref(c.docId, c.section)}">원문 보기</a></div>
+    <div class="md md--compact">${md(c.excerpt, { headingShift: 2 })}</div>
   </li>`;
 }
 
@@ -288,6 +304,70 @@ function renderTrace(a) {
     </div>
     <div class="trace__legend"><span class="is-cited">근거로 사용</span><span>검색만 됨</span></div>
     <p class="trace__note">유사도는 참고용입니다. 답할지 말지는 모델이 조각 안에 근거가 있는지 판단해 정하고, 확신도는 두 신호 중 약한 쪽을 따릅니다.</p>`;
+}
+
+/* ── 정책 문서 화면 ───────────────────── */
+
+let docsCache = null;
+
+async function loadDocs() {
+  docsCache ??= api.docs().then((docs) => {
+    for (const d of docs) docMeta[d.id] = { ...docMeta[d.id], ...d };
+    return [...docs].sort((a, b) => a.title.localeCompare(b.title, "ko"));
+  });
+  try {
+    return await docsCache;
+  } catch (e) {
+    docsCache = null;
+    throw e;
+  }
+}
+
+async function renderDocs(docId, section) {
+  let docs;
+  try {
+    docs = await loadDocs();
+  } catch (e) {
+    $("#doc-view").innerHTML = `<p class="muted">문서를 불러오지 못했습니다: ${esc(e.message)}</p>`;
+    return;
+  }
+  const doc = docs.find((d) => d.id === docId) ?? docs[0];
+  if (!doc) return;
+
+  $("#doc-count").textContent = `${docs.length}개`;
+  $("#doc-list").innerHTML = docs
+    .map(
+      (d) => `<li><a href="${docHref(d.id)}" ${d.id === doc.id ? 'aria-current="page"' : ""}>
+        <span>${esc(d.title)}</span>${d.status === "pending" ? '<span class="pill pill--pending">준비 중</span>' : ""}</a></li>`,
+    )
+    .join("");
+  $("#doc-select").innerHTML = docs
+    .map((d) => `<option value="${esc(d.id)}" ${d.id === doc.id ? "selected" : ""}>${esc(d.title)}${d.status === "pending" ? " (준비 중)" : ""}</option>`)
+    .join("");
+
+  // 제목 id는 섹션 이름 기준 → 근거 카드의 "원문 보기"가 해당 섹션으로 바로 이동
+  const headingId = sectionId;
+  const pending = doc.status === "pending"
+    ? `<p class="doc__notice">${icon(ICON.alert)}<span>준비 중인 정책입니다. 확정 전 내용이므로 고객에게 요금·일정을 약속하지 마세요.</span></p>`
+    : "";
+  $("#doc-view").innerHTML = `
+    <header class="doc__head">
+      <h2 class="doc__title">${esc(doc.title)}</h2>
+      <span class="pill pill--${doc.status}">${doc.status === "pending" ? "준비 중" : "확정"}</span>
+      <span class="doc__meta">수정일 ${esc(doc.updatedAt)}</span>
+    </header>
+    ${pending}
+    <div class="md">${md(doc.body, { skipTitle: true, headingId })}</div>
+    <p class="doc__source">코파일럿이 답변 근거로 검색하는 원문과 같은 동기화 결과입니다 · 문서 id <code>${esc(doc.id)}</code></p>`;
+
+  const target = section && document.getElementById(sectionId(section));
+  if (target) {
+    target.scrollIntoView({ block: "start" });
+    target.classList.add("flash");
+    setTimeout(() => target.classList.remove("flash"), 1700);
+  } else {
+    window.scrollTo(0, 0);
+  }
 }
 
 /* ── 운영 화면 ────────────────────────── */
@@ -418,6 +498,8 @@ $("#result").addEventListener("click", async (e) => {
   }
 });
 
+$("#doc-select").addEventListener("change", (e) => (location.hash = docHref(e.target.value)));
+
 window.addEventListener("hashchange", route);
 
 renderExamples();
@@ -430,4 +512,5 @@ if (initialQ && location.hash !== "#/ops") {
   ask(initialQ).then(() => params.has("reply") && makeReply());
 }
 // 검색 추적에 문서 제목을 쓰려고 운영 데이터를 미리 한 번 읽어 둠
-if (location.hash !== "#/ops") api.ops().then(setDocMeta).catch(() => {});
+// 검색 추적·문서 참조 링크에 문서 제목을 쓰려고 문서 목록을 미리 한 번 읽어 둠
+loadDocs().catch(() => {});

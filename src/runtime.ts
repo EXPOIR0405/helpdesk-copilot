@@ -15,6 +15,8 @@ import {
   supabaseIndexRepo,
   supabaseKeepalive,
   supabaseOpsDocs,
+  supabasePolicyDocs,
+  type PolicyDocView,
   supabaseQuota,
   supabaseSearch,
   supabaseUnansweredLog,
@@ -29,6 +31,8 @@ type Backend = {
   answers: AnswerStore;
   quota: Quota;
   opsDocs(): Promise<Awaited<ReturnType<typeof supabaseOpsDocs>>>;
+  /** 정책 문서 탭용 원문. 검색 인덱스와 같은 동기화 결과에서 읽음 */
+  policyDocs(): Promise<PolicyDocView[]>;
   keepalive(): Promise<void>;
 };
 
@@ -44,6 +48,7 @@ export function selectBackend(): Backend {
       answers: supabaseAnswerStore(db),
       quota: supabaseQuota(db),
       opsDocs: () => supabaseOpsDocs(db),
+      policyDocs: () => supabasePolicyDocs(db),
       keepalive: () => supabaseKeepalive(db),
     };
   }
@@ -68,6 +73,12 @@ export function selectBackend(): Backend {
         docs: Object.entries(index.docs).map(([id, d]) => ({ id, title: d.title, status: d.status, updatedAt: d.updatedAt, chunks: counts.get(id) ?? 0 })),
         syncedAt: index.syncedAt,
       };
+    },
+    async policyDocs() {
+      const index = await loadIndex();
+      return Object.entries(index.docs)
+        .map(([id, d]) => ({ id, title: d.title, status: d.status, updatedAt: d.updatedAt, body: d.body ?? "" }))
+        .sort((a, b) => a.id.localeCompare(b.id));
     },
     keepalive: async () => {},
   };
@@ -99,5 +110,5 @@ export async function createRuntime(opts: { log?: UnansweredLog } = {}) {
     });
   }
 
-  return { backend, log, copilot, replyWriter, ops };
+  return { backend, log, copilot, replyWriter, ops, policyDocs: backend.policyDocs };
 }

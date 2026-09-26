@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildReplyInput, createReplyWriter, findUnsupportedNumbers, type ReplyGenerator } from "../src/core/reply.ts";
+import { buildReplyInput, createReplyWriter, findUnsupportedNumbers, GREETING, withGreeting, type ReplyGenerator } from "../src/core/reply.ts";
 import type { Answer } from "../src/core/types.ts";
 
 const answer = (over: Partial<Answer> = {}): Answer => ({
@@ -39,11 +39,31 @@ describe("buildReplyInput", () => {
   });
 });
 
+describe("withGreeting", () => {
+  it("이미 인사말로 시작하면 한 줄로 떼어 둠", () => {
+    expect(withGreeting(`${GREETING} 환불됩니다.`)).toBe(`${GREETING}\n환불됩니다.`);
+    expect(withGreeting(`${GREETING}\n\n환불됩니다.`)).toBe(`${GREETING}\n환불됩니다.`);
+  });
+
+  it("다른 인사로 시작하면 걷어 내고 인사말로 바꿈", () => {
+    expect(withGreeting("안녕하세요, 고객님. 환불됩니다.")).toBe(`${GREETING}\n환불됩니다.`);
+    expect(withGreeting("안녕하세요! 시네웨이브입니다. 환불됩니다.")).toBe(`${GREETING}\n환불됩니다.`);
+  });
+
+  it("인사 뒤에 문장부호 없이 본문이 이어져도 본문은 지우지 않음", () => {
+    expect(withGreeting("안녕하세요 환불은 7일 이내 가능합니다.")).toBe(`${GREETING}\n환불은 7일 이내 가능합니다.`);
+  });
+
+  it("인사가 없으면 앞에 붙임", () => {
+    expect(withGreeting("환불됩니다.")).toBe(`${GREETING}\n환불됩니다.`);
+  });
+});
+
 describe("replyWriter", () => {
   it("모델 출력을 다듬고 근거 밖 숫자를 표시", async () => {
     const generate = vi.fn<ReplyGenerator>(async () => "  안녕하세요.  \n30일 이내 환불됩니다.  ");
     const reply = await createReplyWriter(generate).write("환불돼요?", answer());
-    expect(reply).toEqual({ text: "안녕하세요.\n30일 이내 환불됩니다.", unsupportedNumbers: ["30"] });
+    expect(reply).toEqual({ text: `${GREETING}\n30일 이내 환불됩니다.`, unsupportedNumbers: ["30"] });
     expect(generate.mock.calls[0][1]).toContain("상담원 메모: 환불돼요?");
   });
 });

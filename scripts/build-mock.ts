@@ -57,6 +57,9 @@ for (const c of index.chunks) chunkCount.set(c.docId, (chunkCount.get(c.docId) ?
 
 const mock = {
   source: evalPath,
+  docs: Object.entries(index.docs)
+    .map(([id, d]) => ({ id, title: d.title, status: d.status, updatedAt: d.updatedAt, body: d.body }))
+    .sort((a, b) => a.id.localeCompare(b.id)),
   answers: rows.map((r) => ({ question: r.q.question, answer: r.a, reply: cache[cacheKey(r)] ?? null })),
   ops: buildOps({
     syncedAt: index.syncedAt,

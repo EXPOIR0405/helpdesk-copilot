@@ -23,7 +23,10 @@ export const config = {
   // 공개 데모 비용 방어
   limits: {
     questionMaxChars: 300,
-    perIpPerMinute: 6,
+    // 연타 방지용. 질문 하나에 답변·답장 2번이라 넉넉하게
+    perIpPerMinute: 20,
+    // 비용 방어는 하루 모델 호출 상한으로: 한 방문자가 전체 한도를 다 쓰지 못하게 IP별 상한을 먼저 적용
+    perIpDailyModelCalls: 30,
     // 모델을 실제로 부르는 요청(답변·답장) 하루 전체 상한. 넘으면 화면이 목업 모드로 전환
     dailyModelCalls: 300,
     // 같은 질문은 이 시간 동안 저장된 답변 재사용

@@ -9,9 +9,10 @@ export type ApiDeps = {
   answers: AnswerStore;
   quota: Quota;
   ops(): Promise<OpsData>;
+  policyDocs(): Promise<{ id: string; title: string; status: string; updatedAt: string; body: string }[]>;
   /** DB 일시정지 방지용 가벼운 조회 + 오래된 제한 기록 정리 */
   keepalive(): Promise<void>;
-  limits: { questionMaxChars: number; perIpPerMinute: number; dailyModelCalls: number; answerCacheHours: number };
+  limits: { questionMaxChars: number; perIpPerMinute: number; perIpDailyModelCalls: number; dailyModelCalls: number; answerCacheHours: number };
   /** Vercel Cron이 Authorization 헤더로 보내는 값. 없으면 keepalive 거부 */
   cronSecret?: string;
   now?: () => Date;
@@ -46,10 +47,20 @@ export function createApi(deps: ApiDeps): Handler {
   const { limits } = deps;
 
   const perIp = (req: Request) => deps.quota.take(`ip:${clientIp(req)}`, 60, limits.perIpPerMinute);
-  // 모델을 실제로 부르기 직전에만 셈. 캐시 적중은 하루 상한에 포함하지 않음
-  const daily = () => deps.quota.take(`day:${now().toISOString().slice(0, 10)}`, 86_400, limits.dailyModelCalls);
   const RATE_LIMITED = () => fail(429, "rate_limited", "요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.");
-  const DAILY_CAP = () => fail(429, "daily_cap", "오늘 데모 호출 한도를 모두 썼습니다.");
+
+  // 모델을 실제로 부르기 직전에만 셈. 캐시 적중은 하루 상한에 포함하지 않음
+  // IP별 상한을 먼저 확인해서, 한 방문자에게 막힌 요청이 전체 한도를 깎지 않게 함
+  async function dailyCap(req: Request): Promise<Response | null> {
+    const day = now().toISOString().slice(0, 10);
+    if (!(await deps.quota.take(`day:${day}:ip:${clientIp(req)}`, 86_400, limits.perIpDailyModelCalls))) {
+      return fail(429, "daily_cap", "이 네트워크에서 오늘 쓸 수 있는 데모 호출을 모두 썼습니다.");
+    }
+    if (!(await deps.quota.take(`day:${day}`, 86_400, limits.dailyModelCalls))) {
+      return fail(429, "daily_cap", "오늘 데모 호출 한도를 모두 썼습니다.");
+    }
+    return null;
+  }
 
   const routes: Record<string, Handler> = {
     "POST /api/ask": async (req) => {
@@ -65,7 +76,8 @@ export function createApi(deps: ApiDeps): Handler {
       const cached = await deps.answers.findRecent(question, since);
       if (cached) return json({ answer: cached.answer, answerId: cached.id, cached: true });
 
-      if (!(await daily())) return DAILY_CAP();
+      const capped = await dailyCap(req);
+      if (capped) return capped;
       const answer = await deps.copilot.ask(question);
       const answerId = await deps.answers.save(question, answer);
       return json({ answer, answerId, cached: false });
@@ -82,13 +94,16 @@ export function createApi(deps: ApiDeps): Handler {
       if (!stored) return fail(404, "not_found", "답변을 찾지 못했습니다. 질문을 다시 보내 주세요.");
       if (stored.reply && body?.fresh !== true) return json(stored.reply);
 
-      if (!(await daily())) return DAILY_CAP();
+      const capped = await dailyCap(req);
+      if (capped) return capped;
       const reply = await deps.replyWriter.write(stored.question, stored.answer);
       await deps.answers.saveReply(answerId, reply);
       return json(reply);
     },
 
     "GET /api/ops": async () => json(await deps.ops()),
+
+    "GET /api/docs": async () => json(await deps.policyDocs()),
 
     "GET /api/keepalive": async (req) => {
       if (!deps.cronSecret || req.headers.get("authorization") !== `Bearer ${deps.cronSecret}`) {

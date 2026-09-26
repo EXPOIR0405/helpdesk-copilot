@@ -7,7 +7,7 @@ import type { DocStatus, Embedder, IndexedChunk, PolicyDoc } from "./types.ts";
 export type DocIndex = {
   embeddingModel: string;
   syncedAt: string;
-  docs: Record<string, { hash: string; title: string; status: DocStatus; updatedAt: string }>;
+  docs: Record<string, { hash: string; title: string; status: DocStatus; updatedAt: string; body: string }>;
   chunks: IndexedChunk[];
 };
 
@@ -31,7 +31,7 @@ export async function syncIndex(input: {
 
   for (const doc of input.docs) {
     const h = hash(doc.raw);
-    docs[doc.id] = { hash: h, title: doc.title, status: doc.status, updatedAt: doc.updatedAt };
+    docs[doc.id] = { hash: h, title: doc.title, status: doc.status, updatedAt: doc.updatedAt, body: doc.body };
     const before = prev?.docs[doc.id];
 
     if (before?.hash === h) {

@@ -1,6 +1,241 @@
 # Architecture
 
-> 다이어그램과 설계 결정 본문은 5단계에서 정리. 지금은 평가 기록만 누적
+- 가상 OTT 서비스 시네웨이브(CineWave) 고객센터 상담원용 정책 답변 코파일럿
+- 핵심 원칙: 근거가 있으면 근거와 함께 답하고, 없으면 모른다고 말함
+- 가장 중요한 지표: 잘못된 답변률 (답하면 안 되는 질문에 답한 비율)
+
+## 한눈에 보기
+
+```mermaid
+flowchart LR
+  subgraph Git["GitHub 저장소"]
+    Docs["정책 문서<br/>data/synthetic/docs/*.md"]
+  end
+
+  subgraph Vercel
+    Web["정적 화면<br/>상담 · 정책 문서 · 운영"]
+    API["API 함수<br/>/api/ask · reply · docs · ops"]
+    Cron["Cron 하루 1회<br/>/api/keepalive"]
+  end
+
+  subgraph Supabase["Supabase (Postgres + pgvector)"]
+    DB[("docs · chunks<br/>answers · unanswered · quota")]
+  end
+
+  OpenAI["OpenAI<br/>임베딩 · 생성"]
+
+  Docs -- "npm run sync<br/>바뀐 문서만" --> OpenAI
+  Docs -- "원문·조각·벡터" --> DB
+  Web -- "fetch" --> API
+  API -- "검색 · 기록 · 캐시 · 호출 제한" --> DB
+  API -- "질문 임베딩 · 답변 · 답장" --> OpenAI
+  Cron --> API
+  Web -. "API를 쓸 수 없으면" .-> Mock["목업 데이터<br/>평가 때의 실제 응답"]
+```
+
+- 화면은 프레임워크 없는 정적 HTML·JS, API는 표준 Request/Response 핸들러 하나
+- 같은 핸들러를 로컬 개발 서버와 Vercel 함수가 공유
+- 저장소는 환경 변수로 선택: Supabase가 없으면 로컬 JSON 파일·메모리
+
+## 질문 처리 흐름
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor A as 상담원
+  participant API as /api/ask
+  participant DB as Supabase
+  participant AI as OpenAI
+
+  A->>API: 고객 문의
+  API->>DB: IP별 분당 제한 확인
+  API->>DB: 같은 질문 24시간 캐시 조회
+  alt 캐시 적중
+    DB-->>API: 저장된 답변
+  else 캐시 없음
+    API->>DB: 하루 호출 상한 확인 (IP별 → 전체)
+    API->>AI: 질문 임베딩
+    API->>DB: match_chunks (코사인 상위 5개, 하한 0.15)
+    alt 검색 결과 없음
+      Note over API: 모델 호출 없이 "근거 없음"
+    else 검색 결과 있음
+      API->>AI: 근거 조각만 주고 판단 요청 (JSON Schema)
+      Note over API: 코드 가드 적용 → 상태·확신도 확정
+    end
+    API->>DB: 답변 저장 (answerId), 미답변이면 기록
+  end
+  API-->>A: 답변 + 근거 + answerId
+
+  A->>API: 고객 답장 만들기 (answerId)
+  Note over API: 저장된 답변과 근거만 모델에 넘김
+  API-->>A: 답장 초안 + 근거 밖 숫자 경고
+```
+
+## 답변 상태 결정
+
+```mermaid
+flowchart TD
+  Q["질문"] --> R{"검색 결과<br/>있음?"}
+  R -- 없음 --> U1["근거 없음<br/>(모델 호출 안 함)"]
+  R -- 있음 --> M["모델 판단<br/>status · grounding · 인용 조각"]
+  M --> G1{"answered인데<br/>grounding none 또는<br/>인용 0개?"}
+  G1 -- 예 --> U2["근거 없음"]
+  G1 -- 아니오 --> G2{"answered인데<br/>준비 중 문서 인용?"}
+  G2 -- 예 --> P["준비 중 정책"]
+  G2 -- 아니오 --> S["모델이 정한 상태"]
+  S --> C["확신도 = min(검색 점수 등급, 모델 근거 등급)<br/>상태가 근거 없음이면 항상 낮음"]
+  P --> C
+```
+
+## 문서 동기화
+
+```mermaid
+flowchart LR
+  F["문서 파일"] --> H{"sha256 해시<br/>이전과 같음?"}
+  H -- 같음 --> K["기존 조각·벡터 유지"]
+  H -- 다름/새 문서 --> C["## 기준으로 조각 분할"] --> E["임베딩"] --> W["조각 교체"]
+  X["사라진 문서"] --> D["문서 삭제<br/>(조각은 cascade)"]
+  M{"임베딩 모델<br/>바뀜?"} -- 예 --> ALL["전부 다시 처리"]
+```
+
+- 문서 행(메타·원문)은 매번 전부 upsert, 조각은 바뀐 문서만 교체
+- 원문도 같은 동기화로 저장 → 정책 문서 탭에서 보는 문서 = 코파일럿이 검색하는 문서
+
+## 데이터 모델
+
+```mermaid
+erDiagram
+  docs ||--o{ chunks : "조각"
+  docs {
+    text id PK
+    text title
+    text status "confirmed | pending"
+    date updated_at
+    text hash
+    text body
+  }
+  chunks {
+    text id PK "문서id#순번"
+    text doc_id FK
+    text section "## 제목"
+    text status
+    text text
+    vector embedding "1536차원"
+  }
+  answers {
+    uuid id PK "answerId"
+    text question_key "캐시 키"
+    jsonb answer
+    jsonb reply
+  }
+  unanswered {
+    timestamptz at
+    text question
+    text status
+    real top_score
+    text nearest_doc_id
+  }
+  quota {
+    text key PK "ip:… · day:…"
+    timestamptz window_start
+    int count
+  }
+  meta {
+    text key PK "embedding_model · synced_at"
+    text value
+  }
+```
+
+- 모든 테이블 RLS 켜고 정책 없음, DB 함수는 서버 역할만 실행 → 공개 키로는 읽기·쓰기 불가
+
+## 설계 결정
+
+### 1. 거절은 검색 점수가 아니라 모델의 근거 판단으로
+
+- 결정: 검색 하한은 0.15로 느슨하게 두고, 답할지 말지는 모델이 조각 안에 근거가 있는지 판단
+- 이유: 1차 평가에서 두 분포가 겹침
+  - 답해야 하는 구어체 질문: 정답 문서 유사도 0.3 미만까지 떨어짐
+  - 거절해야 하는 질문: 유사도 최대 0.48
+  - 어떤 하한을 잡아도 과잉 거절이나 잘못된 답변 중 하나가 생김
+- 결과: 과잉 거절률 18.8% → 6.3%, 잘못된 답변률 0% 유지
+
+### 2. 확신도는 두 신호 중 약한 쪽
+
+- 검색 점수 등급(0.5 이상 높음, 0.35 이상 보통)과 모델 근거 판단(full·partial·none) 중 낮은 쪽
+- 모델이 "충분"이라고 해도 검색 점수가 낮으면 낮음 → 상담원에게 "원문을 직접 확인" 경고
+- 확신도 낮음과 근거 없음은 미답변 기록으로 → 운영 화면에서 문서 보강 후보로
+
+### 3. 모델 판단 위에 코드 가드
+
+- 검색 결과가 없으면 모델을 부르지 않음 → 지어낸 답이 나올 여지 자체를 없앰
+- 모델이 answered라고 해도 근거 판단 none이거나 인용 조각이 없으면 근거 없음으로 바꿈
+- 준비 중 문서를 근거로 확정 답을 내면 준비 중 정책으로 바꿈
+- 모델이 없는 조각 id를 인용하면 무시
+- 이유: 규칙으로 검증할 수 있는 불변식은 프롬프트에만 맡기지 않음
+
+### 4. "준비 중" 정책을 별도 상태로
+
+- 문서 frontmatter `status: pending` → 답변 상태 `pending_policy`
+- 확정 전 정책을 확정처럼 안내하는 사고를 막기 위함. 화면에서 주황 배지와 "약속하지 말 것" 안내
+
+### 5. 상담원 답변과 고객 답장을 두 단계로
+
+- 1단계 답변: 정확성·근거 확인용. 상담원이 근거를 본 뒤에만 2단계로
+- 2단계 답장: 표현·말투용 전용 프롬프트. 입력은 확인된 답변과 인용 근거뿐
+- 답장의 숫자 중 답변·근거에 없는 것을 코드로 찾아 경고
+- 첫 줄 고정 인사말도 코드가 한 번 더 맞춤
+- 답장은 `answerId`로만 요청 → 클라이언트가 보낸 임의 텍스트가 모델에 들어가지 않음
+- 버튼을 누를 때만 생성 → 모든 질문에 호출이 두 배가 되지 않음
+
+### 6. 질문 재작성(query rewriting)은 채택하지 않음
+
+- 소형 모델로 구어체 질문을 정책 용어로 바꿔 검색해 봄
+- 한 문항(q13)은 고쳤지만 다른 문항(q15)이 새로 실패, 검색 적중률 34 → 33
+- 호출 1회와 새 실패 지점을 더하는 대신 운영 루프(미답변 리포트 → 문서 보강)로 어휘 차이를 줄이기로
+
+### 7. 해시 기반 증분 동기화
+
+- 문서 원문의 sha256이 같으면 다시 임베딩하지 않음
+- 비용 절감에 더해 결과 안정성: 같은 텍스트도 다시 임베딩하면 벡터가 조금 달라져 순위가 바뀔 수 있음 (3차 평가 기록 참고)
+- 임베딩 모델이 바뀌면 벡터 공간이 달라지므로 전부 다시 처리
+
+### 8. 저장소를 인터페이스로 분리
+
+- core는 `Search`, `IndexRepo`, `UnansweredLog`에만 의존
+- 로컬(JSON·메모리)과 Supabase가 같은 core를 씀 → 단위 테스트는 가짜 임베더로, 평가는 실제 저장소로
+- pgvector 검색은 로컬과 같은 코사인 계산 → 같은 벡터로 42/42 동일 확인 (3차 평가 기록)
+- 조각 수십 개 규모라 벡터 인덱스 없이 전수 비교. 수천 개를 넘으면 hnsw 인덱스 추가
+
+### 9. 공개 데모 비용 방어
+
+| 장치 | 값 | 역할 |
+|---|---|---|
+| IP별 분당 요청 | 20회 | 연타 방지 |
+| IP별 하루 모델 호출 | 30회 | 한 방문자가 전체 한도를 다 쓰지 못하게 |
+| 전체 하루 모델 호출 | 300회 | 최대 비용 상한 |
+| 질문 길이 | 300자 | 긴 입력으로 비용 부풀리기 방지 |
+| 같은 질문 캐시 | 24시간 | 반복 질문은 모델 호출 없이 |
+
+- 캐시 적중은 하루 상한에 세지 않음. IP별 상한을 먼저 확인해 막힌 요청이 전체 한도를 깎지 않게
+- 분당 제한은 처음 6회 → 질문 하나에 답변·답장 2번이라 예시 몇 개만 눌러도 걸려서 배포 후 조정
+
+### 10. 데모 링크가 깨지지 않게
+
+- API 없음·서버 오류·하루 한도 소진 시 화면이 목업 모드로 전환하고 이유를 표시
+  - 목업 데이터는 평가 때 저장한 실제 모델 응답 42건과 실제 답장 초안
+- Supabase 무료 프로젝트는 약 7일간 요청이 없으면 일시정지 → Vercel Cron이 하루 한 번 `/api/keepalive` 호출
+  - `CRON_SECRET`이 맞을 때만 실행, 지난 호출 제한 기록도 함께 정리
+
+### 11. 빌드는 Vercel Build Output API로 직접
+
+- 소스는 Node 타입 스트리핑용으로 `.ts` 확장자 import를 씀 → Vercel의 TS 자동 빌드에 맡기지 않음
+- esbuild로 API를 하나로 번들해 `.vercel/output`을 직접 생성, Cron 설정도 함께
+
+### 12. 콜드 스타트 동시 요청에 런타임은 하나만
+
+- 첫 배포 테스트에서 답장 요청이 방금 만든 답변을 못 찾는 문제
+- 원인: 화면이 `/api/docs`와 `/api/ask`를 동시에 보내고, 런타임을 `await` 뒤에 값으로 저장 → 두 요청이 각자 런타임(메모리 저장소 포함)을 만듦
+- 해결: 값이 아니라 Promise를 저장. 초기화가 실패하면 다음 요청에서 다시 시도
 
 ## 평가 기록
 

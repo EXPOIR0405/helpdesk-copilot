@@ -20,6 +20,7 @@
       </a>
       <nav class="tabs" aria-label="화면">
         <a class="tabs__link" href="#/" data-route="agent">상담</a>
+        <a class="tabs__link" href="#/docs" data-route="docs">정책 문서</a>
         <a class="tabs__link" href="#/ops" data-route="ops">운영</a>
       </nav>
       <span class="demo-badge" title="가상 회사·가상 정책으로 만든 데모입니다">데모 · 가상 데이터</span>
@@ -73,6 +74,24 @@
       </div>
     </section>
 
+    <!-- 정책 문서 -->
+    <section id="view-docs" class="view" aria-labelledby="docs-view-title" hidden>
+      <h1 id="docs-view-title" class="visually-hidden">정책 문서</h1>
+      <div class="docs">
+        <nav class="docs__nav" aria-label="정책 문서 목록">
+          <p class="docs__nav-title">정책 문서 <span id="doc-count" class="muted"></span></p>
+          <ul id="doc-list" class="doc-list"></ul>
+        </nav>
+        <div class="docs__pick">
+          <label for="doc-select" class="ask__label">문서 선택</label>
+          <select id="doc-select" class="select"></select>
+        </div>
+        <article id="doc-view" class="doc panel" tabindex="-1">
+          <p class="muted">문서를 불러오는 중입니다.</p>
+        </article>
+      </div>
+    </section>
+
     <!-- 운영 화면 -->
     <section id="view-ops" class="view" aria-labelledby="ops-title" hidden>
       <div class="ops">
@@ -119,6 +138,7 @@
     </section>
   </main>
 
+  <script src="markdown.js"></script>
   <script src="mock-data.js"></script>
   <script src="app.js"></script>
 </body>

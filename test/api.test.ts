@@ -25,8 +25,9 @@ function setup(over: Partial<ApiDeps["limits"]> & { cronSecret?: string } = {}) 
     answers: memoryAnswerStore(now),
     quota: memoryQuota(now),
     ops: async () => ({ syncedAt: null, models: { embedding: "e", generation: "g" }, docs: [], unanswered: [], eval: null }),
+    policyDocs: async () => [{ id: "refund", title: "환불 정책", status: "confirmed", updatedAt: "2026-09-02", body: "## 기준" }],
     keepalive,
-    limits: { questionMaxChars: 20, perIpPerMinute: 100, dailyModelCalls: 100, answerCacheHours: 24, ...limits },
+    limits: { questionMaxChars: 20, perIpPerMinute: 100, perIpDailyModelCalls: 100, dailyModelCalls: 100, answerCacheHours: 24, ...limits },
     cronSecret,
     now,
   });
@@ -76,6 +77,16 @@ describe("POST /api/ask", () => {
     expect((await call("POST", "/api/ask", { question: "b" })).body.code).toBe("daily_cap");
     expect((await call("POST", "/api/ask", { question: "a" })).body.cached).toBe(true);
   });
+
+  it("IP별 하루 상한: 다른 IP는 계속 쓸 수 있고, 막힌 요청은 전체 한도를 깎지 않음", async () => {
+    const { call } = setup({ perIpDailyModelCalls: 1, dailyModelCalls: 2 });
+    const a = { "x-forwarded-for": "1.1.1.1" };
+    const b = { "x-forwarded-for": "2.2.2.2" };
+    await call("POST", "/api/ask", { question: "a" }, a);
+    expect((await call("POST", "/api/ask", { question: "b" }, a)).body.code).toBe("daily_cap");
+    expect((await call("POST", "/api/ask", { question: "b" }, a)).body.code).toBe("daily_cap");
+    expect((await call("POST", "/api/ask", { question: "c" }, b)).status).toBe(200);
+  });
 });
 
 describe("POST /api/reply", () => {
@@ -111,6 +122,12 @@ describe("GET /api/keepalive", () => {
     const { call } = setup();
     expect((await call("GET", "/api/keepalive", undefined, { authorization: "Bearer undefined" })).status).toBe(401);
   });
+});
+
+it("GET /api/docs: 정책 문서 원문 목록", async () => {
+  const { call } = setup();
+  const res = await call("GET", "/api/docs");
+  expect(res.body[0]).toMatchObject({ id: "refund", body: "## 기준" });
 });
 
 it("없는 경로는 404, 처리 중 예외는 500으로 감쌈", async () => {

@@ -48,31 +48,31 @@ export function supabaseIndexRepo(db: SupabaseClient): IndexRepo {
       const get = (k: string) => meta.find((m) => m.key === k)?.value;
       const embeddingModel = get("embedding_model");
       if (!embeddingModel) return null;
-      const docs = must(await db.from("docs").select("id, title, status, updated_at, hash"), "문서 조회") as {
-        id: string; title: string; status: DocStatus; updated_at: string; hash: string;
+      const docs = must(await db.from("docs").select("id, title, status, updated_at, hash, body"), "문서 조회") as {
+        id: string; title: string; status: DocStatus; updated_at: string; hash: string; body: string;
       }[];
       return {
         embeddingModel,
         syncedAt: get("synced_at") ?? "",
-        docs: Object.fromEntries(docs.map((d) => [d.id, { hash: d.hash, title: d.title, status: d.status, updatedAt: d.updated_at }])),
+        docs: Object.fromEntries(docs.map((d) => [d.id, { hash: d.hash, title: d.title, status: d.status, updatedAt: d.updated_at, body: d.body }])),
         chunks: [],
       } satisfies DocIndex;
     },
 
-    // 바뀐 문서만 씀: 추가·수정 문서는 조각을 지우고 다시 넣고, 사라진 문서는 삭제(조각은 cascade)
+    // 문서 행(메타·원문)은 매번 전부 upsert: 수십 행이라 싸고, 컬럼이 늘어도 다음 동기화에 채워짐
+    // 조각은 바뀐 문서만: 추가·수정 문서는 지우고 다시 넣고, 사라진 문서는 삭제(조각은 cascade)
     async save(index, stats) {
       const changed = [...stats.added, ...stats.updated];
       if (stats.removed.length) must(await db.from("docs").delete().in("id", stats.removed), "문서 삭제");
+      must(
+        await db.from("docs").upsert(
+          Object.entries(index.docs).map(([id, d]) => ({
+            id, title: d.title, status: d.status, updated_at: d.updatedAt, hash: d.hash, body: d.body,
+          })),
+        ),
+        "문서 저장",
+      );
       if (changed.length) {
-        must(
-          await db.from("docs").upsert(
-            changed.map((id) => {
-              const d = index.docs[id];
-              return { id, title: d.title, status: d.status, updated_at: d.updatedAt, hash: d.hash };
-            }),
-          ),
-          "문서 저장",
-        );
         must(await db.from("chunks").delete().in("doc_id", changed), "조각 삭제");
         const rows = index.chunks
           .filter((c) => changed.includes(c.docId))
@@ -165,6 +165,15 @@ export async function supabaseOpsDocs(db: SupabaseClient): Promise<{ docs: OpsDo
     })),
     syncedAt: (must(meta, "메타 조회") as { value: string } | null)?.value ?? null,
   };
+}
+
+export type PolicyDocView = { id: string; title: string; status: DocStatus; updatedAt: string; body: string };
+
+export async function supabasePolicyDocs(db: SupabaseClient): Promise<PolicyDocView[]> {
+  const rows = must(await db.from("docs").select("id, title, status, updated_at, body").order("id"), "문서 원문 조회") as {
+    id: string; title: string; status: DocStatus; updated_at: string; body: string;
+  }[];
+  return rows.map((d) => ({ id: d.id, title: d.title, status: d.status, updatedAt: d.updated_at, body: d.body }));
 }
 
 /** 하루 한 번 Cron이 호출. 조회로 DB를 깨워 두고, 지난 제한 기록을 정리 */

@@ -9,6 +9,9 @@ export type CustomerReply = {
   unsupportedNumbers: string[];
 };
 
+/** 모든 고객 답장의 첫 줄. 프롬프트로 지시하고, 모델이 어겨도 코드가 맞춤 */
+export const GREETING = "안녕하세요. 시네웨이브입니다.";
+
 export const REPLY_INSTRUCTIONS = `당신은 OTT 서비스 시네웨이브 고객센터의 답장 작성 도우미입니다.
 상담원이 이미 확인한 답변을, 고객에게 채팅으로 보낼 답장 초안으로 다시 씁니다.
 "상담원 메모"는 상담원이 고객 문의를 옮겨 적은 말이라 "~래요", "고객한테 설명해야 해요" 같은 말투일 수 있습니다.
@@ -25,7 +28,8 @@ export const REPLY_INSTRUCTIONS = `당신은 OTT 서비스 시네웨이브 고�
 표현 규칙
 4. 고객 관점으로 바꿉니다. 문서 이름, 조각 번호, "근거", "정책 문서", "상담원" 같은 내부 표현은 쓰지 않습니다.
    예: "상담원이 직접 처리할 수 없음" → "고객센터에서 직접 처리해 드리기 어렵습니다"
-5. 정중한 존댓말로, 첫 문장에 짧은 인사나 공감을 넣고 바로 본론으로 갑니다. 과한 사과, 이모지, 서명은 넣지 않습니다.
+5. 첫 줄은 정확히 "${GREETING}"로 쓰고, 다음 줄부터 바로 본론을 씁니다. 다른 인사말을 덧붙이지 않습니다.
+   정중한 존댓말로 쓰고, 과한 사과, 이모지, 서명은 넣지 않습니다.
 6. 마크다운(굵게, 제목, 표)을 쓰지 않습니다. 단계가 둘 이상이면 "1. 2." 번호 목록만 씁니다.
 7. 전체 5문장 안팎으로 짧게 씁니다.
 
@@ -60,11 +64,21 @@ export function findUnsupportedNumbers(reply: string, answer: Answer): string[] 
   return [...new Set(found.filter((n) => !known.has(normalize(n))))];
 }
 
+/** 첫 줄을 인사말로 맞춤. 모델이 쓴 인사("안녕하세요, 고객님", "시네웨이브입니다")는 걷어 내고 고정 인사말로 */
+export function withGreeting(text: string): string {
+  const rest = text
+    // "안녕하세요, 고객님." 정도만 인사로 봄. 길게 이어지면 본문일 수 있으므로 건드리지 않음
+    .replace(/^안녕하세요([,\s]*[^.!\n\s]{0,6}님)?[.!]?\s*/, "")
+    .replace(/^(저희는\s*)?시네웨이브(입니다|예요)[.!]?\s*/, "")
+    .trim();
+  return `${GREETING}\n${rest}`;
+}
+
 export function createReplyWriter(generate: ReplyGenerator) {
   return {
     async write(question: string, answer: Answer): Promise<CustomerReply> {
       const raw = await generate(REPLY_INSTRUCTIONS, buildReplyInput(question, answer));
-      const text = raw.replace(/[ \t]+$/gm, "").trim();
+      const text = withGreeting(raw.replace(/[ \t]+$/gm, "").trim());
       return { text, unsupportedNumbers: findUnsupportedNumbers(text, answer) };
     },
   };
