@@ -2,7 +2,9 @@
 // 사용법: npm run dev → http://localhost:3000
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { extname, join, normalize } from "node:path";
+import { extname, join } from "node:path";
+// URL 경로는 항상 /로 구분 → posix로 정규화 (win32 normalize는 "/"를 "\\"로 바꿔 index.html을 못 찾음)
+import { normalize } from "node:path/posix";
 import handler from "../src/server/entry.ts";
 import { selectBackend } from "../src/runtime.ts";
 

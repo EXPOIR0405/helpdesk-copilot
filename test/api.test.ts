@@ -63,6 +63,7 @@ describe("POST /api/ask", () => {
     expect((await call("POST", "/api/ask", { question: "  " })).status).toBe(400);
     expect((await call("POST", "/api/ask", { question: "가".repeat(21) })).body.code).toBe("too_long");
     expect((await call("POST", "/api/ask", "not json")).status).toBe(400);
+    expect((await call("POST", "/api/ask", { question: "�� 몇 대?" })).body.code).toBe("bad_encoding");
     expect(ask).not.toHaveBeenCalled();
   });
 

@@ -124,6 +124,11 @@ export function createApi(deps: ApiDeps): Handler {
       const body = await readJson(req);
       const question = typeof body?.question === "string" ? body.question.trim() : "";
       if (!question) return fail(400, "bad_request", "질문을 입력해 주세요.");
+      // UTF-8이 아닌 본문(예: Windows curl의 CP949)은 깨진 문자(U+FFFD)로 들어옴
+      // 그대로 받으면 엉뚱한 검색 → "근거 없음" → 미답변 리포트가 깨진 질문으로 오염됨
+      if (question.includes("�")) {
+        return fail(400, "bad_encoding", "질문 인코딩을 읽을 수 없습니다. UTF-8로 보내 주세요.");
+      }
       if (question.length > limits.questionMaxChars) {
         return fail(400, "too_long", `질문은 ${limits.questionMaxChars}자까지 입력할 수 있습니다.`);
       }
