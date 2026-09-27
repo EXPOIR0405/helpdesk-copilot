@@ -58,11 +58,16 @@ async function runOnce(run: number): Promise<EvalRow[]> {
   return rows.sort((x, y) => x.q.id.localeCompare(y.q.id));
 }
 
+// 호출 실패는 "답하지 않음"으로 채점되므로 잘못된 답변률이 0%로 보임 → 실패가 많으면 결과 자체가 무효
+// (gemini-2.5-flash-lite가 126건 전부 404인데 잘못된 답변률 0%로 비교표 1위에 오를 뻔함)
+const MAX_ERROR_RATE = 0.2;
+const errorRate = () => errors.length / (runs.flat().length || 1);
 const runs: EvalRow[][] = [];
 for (let i = 1; i <= runCount; i++) {
   runs.push(await runOnce(i));
   const s = summarizeEval(runs.at(-1)!, new Date());
   console.log(`${i}회차: 상태 정확도 ${s.statusAccuracy.n}/${s.statusAccuracy.d}, 잘못된 답변 ${s.wrongAnswer.n}/${s.wrongAnswer.d}`);
+  if (errorRate() > MAX_ERROR_RATE) break;
 }
 
 const all = runs.flat();
@@ -127,13 +132,18 @@ await mkdir("data/logs", { recursive: true });
 const out = `data/logs/eval-${model}-${stamp}.json`;
 await writeFile(out, JSON.stringify(runs, null, 2));
 
+if (errorRate() > MAX_ERROR_RATE) {
+  console.error(`\n호출 실패율 ${(errorRate() * 100).toFixed(0)}% → 비교 결과로 쓸 수 없어 저장하지 않음 (첫 오류: ${errors[0]?.message})`);
+  process.exit(1);
+}
+
 // 모델 비교표(npm run compare)의 입력. 저장소에 커밋
 await mkdir("data/eval-models", { recursive: true });
 const modelOut = `data/eval-models/${model}.json`;
 const misses = [...missCount].map(([id, m]) => ({ id, expected: m.q.expected_status, missedRuns: m.actual.length }));
 await writeFile(
   modelOut,
-  JSON.stringify({ model, runs: runCount, pricesCheckedAt: PRICES_CHECKED_AT, ...summary, worstWrongAnswer, errors: errors.length, usage, misses, unstable }, null, 2) + "\n",
+  JSON.stringify({ model, runs: runs.length, pricesCheckedAt: PRICES_CHECKED_AT, ...summary, worstWrongAnswer, errors: errors.length, usage, misses, unstable }, null, 2) + "\n",
 );
 
 // 운영 화면 품질 지표는 실제 서비스 모델의 결과만

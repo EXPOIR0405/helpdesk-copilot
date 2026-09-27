@@ -1,0 +1,61 @@
+{
+  "model": "gpt-5.4-mini",
+  "runs": 3,
+  "pricesCheckedAt": "2026-09-27",
+  "at": "2026-09-27T12:35:05.685Z",
+  "total": 126,
+  "retrievalHit": {
+    "n": 102,
+    "d": 105
+  },
+  "statusAccuracy": {
+    "n": 119,
+    "d": 126
+  },
+  "wrongAnswer": {
+    "n": 1,
+    "d": 30
+  },
+  "overRefusal": {
+    "n": 6,
+    "d": 96
+  },
+  "worstWrongAnswer": 1,
+  "errors": 0,
+  "usage": {
+    "calls": 126,
+    "inputTokens": 111795,
+    "outputTokens": 15874,
+    "costUsd": 0.15527925000000006,
+    "costPer1kQuestionsUsd": 1.2323750000000004,
+    "latencyP50Ms": 1446,
+    "latencyP95Ms": 2413
+  },
+  "misses": [
+    {
+      "id": "q13",
+      "expected": "answered",
+      "missedRuns": 3
+    },
+    {
+      "id": "q41",
+      "expected": "unanswerable",
+      "missedRuns": 1
+    },
+    {
+      "id": "q42",
+      "expected": "answered",
+      "missedRuns": 3
+    }
+  ],
+  "unstable": [
+    {
+      "id": "q41",
+      "statuses": [
+        "answered",
+        "unanswerable",
+        "unanswerable"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "model": "gpt-5-nano",
+  "runs": 3,
+  "pricesCheckedAt": "2026-09-27",
+  "at": "2026-09-27T12:41:28.148Z",
+  "total": 126,
+  "retrievalHit": {
+    "n": 102,
+    "d": 105
+  },
+  "statusAccuracy": {
+    "n": 118,
+    "d": 126
+  },
+  "wrongAnswer": {
+    "n": 1,
+    "d": 30
+  },
+  "overRefusal": {
+    "n": 7,
+    "d": 96
+  },
+  "worstWrongAnswer": 1,
+  "errors": 0,
+  "usage": {
+    "calls": 126,
+    "inputTokens": 111795,
+    "outputTokens": 49741,
+    "costUsd": 0.025388229999999998,
+    "costPer1kQuestionsUsd": 0.20149388888888886,
+    "latencyP50Ms": 2770,
+    "latencyP95Ms": 4468
+  },
+  "misses": [
+    {
+      "id": "q13",
+      "expected": "answered",
+      "missedRuns": 3
+    },
+    {
+      "id": "q42",
+      "expected": "answered",
+      "missedRuns": 3
+    },
+    {
+      "id": "q23",
+      "expected": "answered",
+      "missedRuns": 1
+    },
+    {
+      "id": "q41",
+      "expected": "unanswerable",
+      "missedRuns": 1
+    }
+  ],
+  "unstable": [
+    {
+      "id": "q23",
+      "statuses": [
+        "answered",
+        "unanswerable",
+        "answered"
+      ]
+    },
+    {
+      "id": "q41",
+      "statuses": [
+        "unanswerable",
+        "unanswerable",
+        "answered"
+      ]
+    }
+  ]
+}

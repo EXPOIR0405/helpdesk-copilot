@@ -10,14 +10,17 @@ export function openAIEmbedder(client: OpenAI, model: string): Embedder {
   };
 }
 
-export function openAIGenerator(client: OpenAI, model: string): Generator {
+// 추론 모델만 effort low. 비추론 모델(gpt-4.1·4o)에 보내면 400
+const reasoningFor = (reasoning: boolean) => (reasoning ? { reasoning: { effort: "low" as const } } : {});
+
+export function openAIGenerator(client: OpenAI, model: string, opts = { reasoning: true }): Generator {
   return async (question, chunks) => {
     const started = Date.now();
     const res = await client.responses.create({
       model,
       instructions: INSTRUCTIONS,
       input: buildInput(question, chunks),
-      reasoning: { effort: "low" },
+      ...reasoningFor(opts.reasoning),
       text: {
         format: { type: "json_schema", name: "verdict", strict: true, schema: VERDICT_SCHEMA },
       },
@@ -34,9 +37,9 @@ export function openAIGenerator(client: OpenAI, model: string): Generator {
   };
 }
 
-export function openAIReplyGenerator(client: OpenAI, model: string): ReplyGenerator {
+export function openAIReplyGenerator(client: OpenAI, model: string, opts = { reasoning: true }): ReplyGenerator {
   return async (instructions, input) => {
-    const res = await client.responses.create({ model, instructions, input, reasoning: { effort: "low" } });
+    const res = await client.responses.create({ model, instructions, input, ...reasoningFor(opts.reasoning) });
     return res.output_text;
   };
 }

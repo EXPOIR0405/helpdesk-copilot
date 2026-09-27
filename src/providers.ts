@@ -27,5 +27,6 @@ export function createGenerationModel(id: string): GenerationModel {
     };
   }
   const client = new OpenAI({ timeout: config.modelTimeoutMs });
-  return { id, generate: openAIGenerator(client, id), reply: openAIReplyGenerator(client, id) };
+  const opts = { reasoning: spec.reasoning !== false };
+  return { id, generate: openAIGenerator(client, id, opts), reply: openAIReplyGenerator(client, id, opts) };
 }
