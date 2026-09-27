@@ -164,7 +164,16 @@ flowchart LR
 - 공개 데모라 이메일·전화·카드·주민번호 형태는 모델 호출과 저장 전에 가림
 - 상세: [docs/auto-response-design.md](docs/auto-response-design.md), [n8n/README.md](n8n/README.md)
 
-<!-- 스크린샷 자리: docs/assets/support.png (고객 문의 창), docs/assets/inbox.png (문의함 상세) -->
+<table>
+<tr>
+<td width="42%"><img src="docs/assets/support.png" alt="고객 문의 창"></td>
+<td width="58%"><img src="docs/assets/inbox.png" alt="상담원 문의함 상세"></td>
+</tr>
+<tr>
+<td><b>고객 문의</b><br>고객 입장에서 문의를 보내 보는 창. 예시마다 어느 경로로 갈지 표시</td>
+<td><b>문의함</b><br>넘김 사유·AI 판단(조치 요청)·가까운 문서·비슷한 과거 처리·답장 초안·처리 기록이 한 화면에. 초안을 고쳐 바로 보내고 종결</td>
+</tr>
+</table>
 
 ### 4-3. 모델 선택: 10개를 같은 평가셋으로
 
