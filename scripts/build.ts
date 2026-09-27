@@ -6,7 +6,11 @@ import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { build } from "esbuild";
 
 const out = ".vercel/output";
-const routes = ["ask", "reply", "ops", "docs", "keepalive", "health"];
+const routes = [
+  "ask", "reply", "ops", "docs", "keepalive", "health",
+  // 자동 응대
+  "tickets", "ticket", "ticket-reply", "ticket-review", "tickets-stats", "tickets-overdue", "ticket-event",
+];
 
 await rm(out, { recursive: true, force: true });
 await mkdir(`${out}/static`, { recursive: true });

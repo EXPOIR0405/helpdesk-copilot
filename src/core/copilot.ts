@@ -18,10 +18,19 @@ export type CopilotDeps = {
 export function createCopilot(deps: CopilotDeps) {
   const now = deps.now ?? (() => new Date());
 
-  return {
-    async ask(question: string): Promise<Answer> {
+  const copilot = {
+    /** 답변 + 질문 벡터. 자동 응대가 비슷한 과거 티켓을 찾을 때 같은 벡터를 다시 씀 (임베딩 호출 1번) */
+    async askWithVector(question: string): Promise<{ answer: Answer; vector: number[] }> {
       const q = question.trim();
-      const [vector] = await deps.embed([q]);
+      // 임베딩은 대체 모델이 없음(문서 벡터와 같은 모델이어야 검색됨) → 실패하면 단계를 붙여 던짐
+      // 운영 기록에서 생성 모델 실패와 구분하려고 (모델 이름만으로는 어느 단계인지 안 보임)
+      let vector: number[];
+      try {
+        [vector] = await deps.embed([q]);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        throw Object.assign(new Error(`임베딩 실패: ${message}`), { status: (e as { status?: unknown })?.status, cause: e });
+      }
       const hits = await deps.search(vector, deps.retrieval);
       const topScore = hits[0]?.score ?? 0;
       const retrieved = hits.map((h) => ({ chunkId: h.id, docId: h.docId, score: h.score }));
@@ -36,7 +45,7 @@ export function createCopilot(deps: CopilotDeps) {
           trace: { topScore, grounding: "none", retrieved },
         };
         await record(deps.log, q, answer, null, now());
-        return answer;
+        return { answer, vector };
       }
 
       const verdict = await deps.generate(q, hits);
@@ -64,14 +73,33 @@ export function createCopilot(deps: CopilotDeps) {
         text,
         confidence,
         citations: status === "unanswerable" ? [] : cited.map(toCitation),
+        requestType: verdict.requestType,
         trace: { topScore, grounding: verdict.grounding, retrieved, usage: verdict.usage },
       };
       if (status === "unanswerable" || confidence === "low") {
         await record(deps.log, q, answer, hits[0].docId, now());
       }
-      return answer;
+      return { answer, vector };
+    },
+
+    async ask(question: string): Promise<Answer> {
+      return (await copilot.askWithVector(question)).answer;
     },
   };
+  return copilot;
+}
+
+/** 코사인 유사도. 비슷한 과거 티켓 찾기 (검색은 retrieve.ts·pgvector가 같은 계산) */
+export function cosine(a: number[], b: number[]): number {
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  return na && nb ? dot / Math.sqrt(na * nb) : 0;
 }
 
 function toCitation(c: ScoredChunk): Citation {

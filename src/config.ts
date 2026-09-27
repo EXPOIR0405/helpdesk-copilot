@@ -7,6 +7,9 @@ export const config = {
     // Vercel 함수 30초 안에 기본 모델 + 대체 모델 + 임베딩·DB가 들어가야 함
     // 같은 제공사 재시도 대신 다른 제공사로 넘기는 것을 재시도로 씀 (장애 중엔 같은 곳에 다시 보내도 대부분 실패)
     serving: { timeoutMs: 10_000, attempts: 1, baseDelayMs: 500 },
+    // 질문 임베딩: 대체 모델이 없어 같은 곳 재시도가 유일한 방법. 평소 1초 미만이라 짧게 끊고 한 번 더
+    // 최악 8초 + 생성 10초 + 대체 10초 → 30초 안
+    embedding: { timeoutMs: 4_000, attempts: 2, baseDelayMs: 0 },
     // 평가는 시간보다 완주가 중요. Gemini 무료 티어 분당 제한을 넘기면 간격을 넉넉히 두고 재시도
     eval: { timeoutMs: 30_000, attempts: 4, baseDelayMs: 4_000 },
   },
@@ -32,6 +35,15 @@ export const config = {
     // 최고 유사도 기준. 평가셋 결과로 조정
     high: 0.5,
     medium: 0.35,
+  },
+  // 자동 응대 (docs/auto-response-design.md)
+  support: {
+    // 상담원 대기가 이 시간을 넘으면 SLA 초과 → n8n이 Slack으로 알림
+    slaMinutes: Number(process.env.SUPPORT_SLA_MINUTES) || 30,
+    // 같은 티켓 SLA 재알림 간격
+    remindEveryMinutes: 60,
+    // Slack·n8n 알림의 문의함 링크
+    publicBaseUrl: process.env.PUBLIC_BASE_URL || "https://helpdesk-copilot.vercel.app",
   },
   // 같은 알림은 이 시간 안에 한 번만 (서버리스 인스턴스가 여러 개여도 DB로 확인)
   alertWindowSeconds: 1800,

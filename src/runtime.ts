@@ -27,6 +27,8 @@ import {
 import { consoleSink, createAlerter, describeError, slackSink } from "./core/alerts.ts";
 import { withFallback } from "./core/fallback.ts";
 import { memoryUsageLog, type UsageLog } from "./core/usage.ts";
+import { memoryTicketStore, type TicketStore } from "./core/tickets.ts";
+import { supabaseTicketStore } from "./server/tickets-supabase.ts";
 import evalSummary from "../data/eval-summary.json" with { type: "json" };
 
 type Backend = {
@@ -41,6 +43,7 @@ type Backend = {
   policyDocs(): Promise<PolicyDocView[]>;
   keepalive(): Promise<void>;
   usage: UsageLog;
+  tickets: TicketStore;
   /** 헬스체크용: 검색할 조각 수와 마지막 동기화 시각. 저장소에 닿지 못하면 던짐 */
   health(): Promise<{ chunks: number; syncedAt: string | null }>;
 };
@@ -60,6 +63,7 @@ export function selectBackend(): Backend {
       policyDocs: () => supabasePolicyDocs(db),
       keepalive: () => supabaseKeepalive(db),
       usage: supabaseUsageLog(db),
+      tickets: supabaseTicketStore(db),
       health: () => supabaseHealth(db),
     };
   }
@@ -93,6 +97,7 @@ export function selectBackend(): Backend {
     },
     keepalive: async () => {},
     usage: memoryUsageLog(),
+    tickets: memoryTicketStore(),
     async health() {
       const index = await loadIndex();
       return { chunks: index.chunks.length, syncedAt: index.syncedAt };
@@ -142,9 +147,11 @@ export async function createRuntime(opts: RuntimeOptions = {}) {
       : primary;
   const models = { embedding: config.models.embedding, generation: primary.id, fallback: fallbackId || null };
 
+  // 평가는 넘겨받은 프로필 그대로, 서비스는 임베딩 전용 프로필 (짧게 끊고 한 번 더)
+  const embedCalls = opts.calls ?? config.calls.embedding;
   const copilot = createCopilot({
     search: await backend.search(),
-    embed: openAIEmbedder(new OpenAI({ timeout: calls.timeoutMs, maxRetries: calls.attempts - 1 }), config.models.embedding),
+    embed: openAIEmbedder(new OpenAI({ timeout: embedCalls.timeoutMs, maxRetries: embedCalls.attempts - 1 }), config.models.embedding),
     generate: model.generate,
     log,
     retrieval: config.retrieval,
@@ -172,5 +179,16 @@ export async function createRuntime(opts: RuntimeOptions = {}) {
     });
   }
 
-  return { backend, log, copilot, replyWriter, ops, policyDocs: backend.policyDocs, alerts, models };
+  // 티켓 맥락의 문서 제목. 문서는 동기화 때만 바뀌므로 인스턴스에서 10분 캐시
+  let titles: { at: number; value: Promise<Record<string, string>> } | null = null;
+  function docTitles() {
+    if (!titles || Date.now() - titles.at > 600_000) {
+      const value = backend.opsDocs().then(({ docs }) => Object.fromEntries(docs.map((d) => [d.id, d.title])));
+      value.catch(() => (titles = null));
+      titles = { at: Date.now(), value };
+    }
+    return titles.value;
+  }
+
+  return { backend, log, copilot, replyWriter, ops, policyDocs: backend.policyDocs, alerts, models, docTitles };
 }

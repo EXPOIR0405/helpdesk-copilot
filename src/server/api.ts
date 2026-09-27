@@ -1,12 +1,16 @@
 import { describeError, type Alerter } from "../core/alerts.ts";
 import type { CustomerReply } from "../core/reply.ts";
 import type { OpsData } from "../core/report.ts";
+import { createSupportDesk, summarizeTickets } from "../core/support.ts";
+import type { Ticket, TicketStatus, TicketStore } from "../core/tickets.ts";
+import { REASON_LABEL } from "../core/triage.ts";
 import type { Answer, Usage } from "../core/types.ts";
 import { failureEntry, toEntry, type UsageKind, type UsageLog } from "../core/usage.ts";
+import type { EscalationNotifier } from "./notify.ts";
 import type { AnswerStore, Quota } from "./stores.ts";
 
 export type ApiDeps = {
-  copilot: { ask(question: string): Promise<Answer> };
+  copilot: { ask(question: string): Promise<Answer>; askWithVector(question: string): Promise<{ answer: Answer; vector: number[] }> };
   replyWriter: { write(question: string, answer: Answer): Promise<CustomerReply> };
   answers: AnswerStore;
   quota: Quota;
@@ -32,6 +36,18 @@ export type ApiDeps = {
   health(): Promise<{ chunks: number; syncedAt: string | null }>;
   /** Vercel Cron이 Authorization 헤더로 보내는 값. 없으면 keepalive 거부 */
   cronSecret?: string;
+  /** 자동 응대 (docs/auto-response-design.md). 없으면 티켓 경로 비활성 */
+  tickets?: {
+    store: TicketStore;
+    docTitles(): Promise<Record<string, string>>;
+    notify: EscalationNotifier;
+    /** 상담원 대기가 이 시간을 넘으면 SLA 초과 */
+    slaMinutes: number;
+    /** SLA 알림 재알림 간격 */
+    remindEveryMinutes: number;
+    /** n8n → API 호출 인증 (x-helpdesk-secret). 없으면 n8n 전용 경로 거부 */
+    n8nSecret?: string;
+  };
   now?: () => Date;
 };
 
@@ -119,19 +135,51 @@ export function createApi(deps: ApiDeps): Handler {
     return result;
   }
 
+  /** 질문 본문 검사. 문제가 있으면 오류 응답 */
+  function readQuestion(body: Record<string, unknown> | null): string | Response {
+    const question = typeof body?.question === "string" ? body.question.trim() : "";
+    if (!question) return fail(400, "bad_request", "질문을 입력해 주세요.");
+    // UTF-8이 아닌 본문(예: Windows curl의 CP949)은 깨진 문자(U+FFFD)로 들어옴
+    // 그대로 받으면 엉뚱한 검색 → "근거 없음" → 미답변 리포트가 깨진 질문으로 오염됨
+    if (question.includes("�")) {
+      return fail(400, "bad_encoding", "질문 인코딩을 읽을 수 없습니다. UTF-8로 보내 주세요.");
+    }
+    if (question.length > limits.questionMaxChars) {
+      return fail(400, "too_long", `질문은 ${limits.questionMaxChars}자까지 입력할 수 있습니다.`);
+    }
+    return question;
+  }
+
+  const desk =
+    deps.tickets &&
+    createSupportDesk({
+      ask: (q) => callModel("verdict", () => deps.copilot.askWithVector(q), (r) => r.answer.trace.usage),
+      writeReply: (q, a) => callModel("reply", () => deps.replyWriter.write(q, a), (r) => r.usage),
+      store: deps.tickets.store,
+      docTitles: deps.tickets.docTitles,
+      notifyEscalated: deps.tickets.notify,
+      now,
+    });
+  const NO_TICKETS = () => fail(404, "not_found", "자동 응대가 설정되지 않았습니다.");
+  const TICKET_STATUSES: TicketStatus[] = ["auto_replied", "escalated", "resolved"];
+  const n8nAuthorized = (req: Request) => !!deps.tickets?.n8nSecret && req.headers.get("x-helpdesk-secret") === deps.tickets.n8nSecret;
+  const minutesSince = (iso: string) => Math.floor((now().getTime() - Date.parse(iso)) / 60_000);
+  /** 목록용 요약. 상세(맥락·초안)는 /api/ticket */
+  const summary = (t: Ticket) => ({
+    id: t.id,
+    createdAt: t.createdAt,
+    question: t.question,
+    status: t.status,
+    reason: t.reason,
+    reasonLabel: t.reason ? REASON_LABEL[t.reason] : null,
+    review: t.review,
+    waitingMinutes: t.status === "escalated" ? minutesSince(t.createdAt) : null,
+  });
+
   const routes: Record<string, Handler> = {
     "POST /api/ask": async (req) => {
-      const body = await readJson(req);
-      const question = typeof body?.question === "string" ? body.question.trim() : "";
-      if (!question) return fail(400, "bad_request", "질문을 입력해 주세요.");
-      // UTF-8이 아닌 본문(예: Windows curl의 CP949)은 깨진 문자(U+FFFD)로 들어옴
-      // 그대로 받으면 엉뚱한 검색 → "근거 없음" → 미답변 리포트가 깨진 질문으로 오염됨
-      if (question.includes("�")) {
-        return fail(400, "bad_encoding", "질문 인코딩을 읽을 수 없습니다. UTF-8로 보내 주세요.");
-      }
-      if (question.length > limits.questionMaxChars) {
-        return fail(400, "too_long", `질문은 ${limits.questionMaxChars}자까지 입력할 수 있습니다.`);
-      }
+      const question = readQuestion(await readJson(req));
+      if (question instanceof Response) return question;
       if (!(await perIp(req))) return RATE_LIMITED();
 
       const since = new Date(now().getTime() - limits.answerCacheHours * 3_600_000);
@@ -161,6 +209,88 @@ export function createApi(deps: ApiDeps): Handler {
       const reply = await callModel("reply", () => deps.replyWriter.write(stored.question, stored.answer), (r) => r.usage);
       await deps.answers.saveReply(answerId, reply);
       return json(reply);
+    },
+
+    // 고객 문의 접수 → 자동 응답 또는 상담원에게 넘김. 모델 호출 2번(판단·답장)이라 하루 상한도 2번 셈
+    "POST /api/tickets": async (req) => {
+      if (!desk) return NO_TICKETS();
+      const question = readQuestion(await readJson(req));
+      if (question instanceof Response) return question;
+      if (!(await perIp(req))) return RATE_LIMITED();
+      const capped = (await dailyCap(req)) ?? (await dailyCap(req));
+      if (capped) return capped;
+      const t = await desk.submit(question);
+      // 고객에게는 결과만: 자동 답장 또는 접수 안내
+      return json({ ...summary(t), reply: t.status === "auto_replied" ? t.finalReply : null });
+    },
+
+    "GET /api/tickets": async (req) => {
+      if (!desk) return NO_TICKETS();
+      const status = new URL(req.url).searchParams.get("status") as TicketStatus | null;
+      if (status && !TICKET_STATUSES.includes(status)) return fail(400, "bad_request", "알 수 없는 상태입니다.");
+      return json((await desk.list({ status: status ?? undefined, limit: 50 })).map(summary));
+    },
+
+    "GET /api/ticket": async (req) => {
+      if (!desk) return NO_TICKETS();
+      const found = await desk.get(new URL(req.url).searchParams.get("id") ?? "");
+      if (!found) return fail(404, "not_found", "티켓을 찾지 못했습니다.");
+      // 질문 벡터(1536개 숫자)는 응답에서 뺌
+      const { embedding: _, ...ticket } = found.ticket;
+      return json({ ...found, ticket: { ...ticket, ...summary(found.ticket) } });
+    },
+
+    "POST /api/ticket-reply": async (req) => {
+      if (!desk) return NO_TICKETS();
+      const body = await readJson(req);
+      const id = typeof body?.id === "string" ? body.id : "";
+      const text = typeof body?.text === "string" ? body.text.trim() : "";
+      if (!id || !text) return fail(400, "bad_request", "id와 답장이 필요합니다.");
+      if (text.length > 2000) return fail(400, "too_long", "답장은 2000자까지 보낼 수 있습니다.");
+      if (!(await perIp(req))) return RATE_LIMITED();
+      const r = await desk.agentReply(id, text);
+      if (r === "not_found") return fail(404, "not_found", "티켓을 찾지 못했습니다.");
+      if (r === "not_escalated") return fail(409, "not_escalated", "상담원 대기 중인 티켓이 아닙니다.");
+      return json(summary(r));
+    },
+
+    "POST /api/ticket-review": async (req) => {
+      if (!desk) return NO_TICKETS();
+      const body = await readJson(req);
+      const id = typeof body?.id === "string" ? body.id : "";
+      const verdict = body?.verdict;
+      if (!id || (verdict !== "ok" && verdict !== "wrong")) return fail(400, "bad_request", "id와 verdict(ok·wrong)가 필요합니다.");
+      if (!(await perIp(req))) return RATE_LIMITED();
+      const r = await desk.review(id, verdict);
+      if (r === "not_found") return fail(404, "not_found", "티켓을 찾지 못했습니다.");
+      if (r === "not_auto") return fail(409, "not_auto", "자동 응답한 티켓만 검수합니다.");
+      return json(summary(r));
+    },
+
+    "GET /api/tickets-stats": async () => {
+      if (!desk || !deps.tickets) return NO_TICKETS();
+      const since = new Date(now().getTime() - 7 * 86_400_000);
+      return json({ days: 7, slaMinutes: deps.tickets.slaMinutes, ...summarizeTickets(await deps.tickets.store.since(since), now(), deps.tickets.slaMinutes) });
+    },
+
+    // n8n 전용: SLA 초과 티켓 조회 (10분마다)
+    "GET /api/tickets-overdue": async (req) => {
+      if (!desk || !deps.tickets) return NO_TICKETS();
+      if (!n8nAuthorized(req)) return fail(401, "unauthorized", "인증이 필요합니다.");
+      const due = await desk.overdue(deps.tickets.slaMinutes, deps.tickets.remindEveryMinutes);
+      return json(due.map((t) => ({ ...summary(t), url: `${new URL(req.url).origin}/#/inbox/${t.id}` })));
+    },
+
+    // n8n 전용: 알림 결과 기록
+    "POST /api/ticket-event": async (req) => {
+      if (!desk) return NO_TICKETS();
+      if (!n8nAuthorized(req)) return fail(401, "unauthorized", "인증이 필요합니다.");
+      const body = await readJson(req);
+      const id = typeof body?.id === "string" ? body.id : "";
+      if (!id || body?.type !== "sla_reminded") return fail(400, "bad_request", "id와 type(sla_reminded)이 필요합니다.");
+      if (!(await desk.get(id))) return fail(404, "not_found", "티켓을 찾지 못했습니다.");
+      await desk.markReminded(id, typeof body?.via === "string" ? body.via : "n8n");
+      return json({ ok: true });
     },
 
     "GET /api/ops": async () => json(await deps.ops()),

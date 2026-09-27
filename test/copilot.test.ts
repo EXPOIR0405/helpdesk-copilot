@@ -19,7 +19,7 @@ async function setup(verdict: Partial<ModelVerdict> | ((ids: string[]) => Partia
   const generate = vi.fn<Generator>(async (_q, chunks) => {
     const ids = chunks.map((c) => c.id);
     const v = typeof verdict === "function" ? verdict(ids) : verdict;
-    return { status: "answered", text: "답", grounding: "full", citedChunkIds: ids.slice(0, 1), ...v };
+    return { status: "answered", text: "답", grounding: "full", citedChunkIds: ids.slice(0, 1), requestType: "question", ...v };
   });
   const log = memoryUnansweredLog();
   const copilot = createCopilot({
@@ -107,4 +107,30 @@ describe("groupByNearestDoc", () => {
       { docId: null, count: 1, questions: ["b"] },
     ]);
   });
+});
+
+it("임베딩 실패는 단계를 붙이고 상태 코드를 유지 (운영 기록에서 생성 실패와 구분)", async () => {
+  const createCopilotMod = await import("../src/core/copilot.ts");
+  const copilot = createCopilotMod.createCopilot({
+    search: async () => [],
+    embed: async () => {
+      throw Object.assign(new Error("Request timed out."), { status: undefined });
+    },
+    generate: vi.fn(),
+    log: memoryUnansweredLog(),
+    retrieval: { topK: 3, minScore: 0.5 },
+    confidence: { high: 0.9, medium: 0.6 },
+  });
+  await expect(copilot.ask("환불?")).rejects.toThrow("임베딩 실패: Request timed out.");
+  const e503 = createCopilotMod.createCopilot({
+    search: async () => [],
+    embed: async () => {
+      throw Object.assign(new Error("overloaded"), { status: 503 });
+    },
+    generate: vi.fn(),
+    log: memoryUnansweredLog(),
+    retrieval: { topK: 3, minScore: 0.5 },
+    confidence: { high: 0.9, medium: 0.6 },
+  });
+  await expect(e503.ask("환불?")).rejects.toMatchObject({ status: 503 });
 });

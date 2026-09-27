@@ -24,7 +24,7 @@ function setup(over: Partial<ApiDeps["limits"]> & { cronSecret?: string; health?
   const usage = memoryUsageLog();
   const alerts: Alert[] = [];
   const handle = createApi({
-    copilot: { ask },
+    copilot: { ask, askWithVector: async () => ({ answer: await ask(), vector: [1] }) },
     replyWriter: { write },
     answers: memoryAnswerStore(now),
     quota: memoryQuota(now),

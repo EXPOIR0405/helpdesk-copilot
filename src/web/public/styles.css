@@ -82,7 +82,7 @@ button, textarea { font: inherit; color: inherit; }
 .brand__mark::after { content: ""; position: absolute; inset: 6px 5px 6px 8px; background: var(--surface); clip-path: polygon(0 0, 100% 50%, 0 100%); }
 .brand__name { font-weight: 700; letter-spacing: -0.02em; }
 .brand__product { color: var(--text-2); font-size: 14px; }
-.tabs { display: flex; gap: var(--s1); height: 100%; }
+.tabs { display: flex; gap: var(--s1); height: 100%; overflow-x: auto; scrollbar-width: none; }
 .tabs__link {
   display: flex; align-items: center; padding: 0 var(--s3); min-height: 44px; height: 100%;
   text-decoration: none; color: var(--text-2); font-weight: 500; font-size: 14px;
@@ -348,9 +348,66 @@ button, textarea { font: inherit; color: inherit; }
 .meter--warn .meter__fill { background: var(--warn); }
 .meter--stop .meter__fill { background: var(--stop); }
 
+/* ── 자동 응대: 고객 문의 창 ─────────────── */
+.support { max-width: 720px; margin: 0 auto; display: grid; gap: var(--s4); }
+.support__head .muted { margin-top: var(--s1); }
+.support__warn { font-size: 12px; color: var(--warn); background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: var(--radius-sm); padding: var(--s2) var(--s3); }
+.thread { display: flex; flex-direction: column; gap: var(--s2); min-height: 160px; }
+.bubble { align-self: flex-start; max-width: 85%; background: var(--surface); border: 1px solid var(--border); border-radius: 14px 14px 14px 4px; padding: var(--s2) var(--s3); font-size: 14px; line-height: 1.6; box-shadow: var(--shadow); }
+.bubble--me { align-self: flex-end; background: var(--ink); color: var(--on-ink); border-color: var(--ink); border-radius: 14px 14px 4px 14px; }
+.bubble--me time { display: block; font-size: 11px; opacity: 0.6; margin-top: 2px; text-align: right; }
+.bubble--wait { background: var(--surface-2); color: var(--text-2); }
+.bubble__who { display: block; font-size: 11px; color: var(--text-3); margin-top: var(--s1); }
+.skeleton-text { animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.5; } }
+.chip__hint { font-size: 11px; color: var(--text-3); margin-left: var(--s1); }
+.tabs__count { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 2px; border-radius: 999px; background: var(--stop); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+
+/* ── 자동 응대: 상담원 문의함 ─────────────── */
+.inbox { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: var(--s4); align-items: start; }
+.inbox__list { position: sticky; top: 72px; max-height: calc(100vh - 96px); display: flex; flex-direction: column; }
+.seg { display: flex; gap: 2px; background: var(--surface-2); border-radius: var(--radius-sm); padding: 2px; margin-bottom: var(--s2); }
+.seg__btn { flex: 1; font: inherit; font-size: 12px; font-weight: 600; color: var(--text-2); background: none; border: 0; border-radius: 4px; padding: 6px 4px; cursor: pointer; }
+.seg__btn[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.tickets { overflow-y: auto; margin: 0 calc(var(--s4) * -1); }
+.tickets__empty { padding: var(--s3) var(--s4); font-size: 13px; }
+.ticket { display: block; padding: var(--s2) var(--s4); border-top: 1px solid var(--border); color: inherit; text-decoration: none; }
+.ticket:hover { background: var(--surface-2); }
+.ticket.is-active { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--brand); }
+.ticket__q { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 13px; }
+.ticket__meta { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); margin-top: 4px; font-size: 12px; color: var(--text-3); }
+.is-late { color: var(--stop); font-weight: 700; }
+.inbox__detail { min-height: 360px; }
+.td__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); font-size: 13px; }
+.td__reason strong { color: var(--warn); }
+.td__q { margin: var(--s3) 0 0; padding: var(--s3); background: var(--surface-2); border-left: 3px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 15px; }
+.td__sec { border-top: 1px solid var(--border); margin-top: var(--s4); padding-top: var(--s3); }
+.td__sec h3 { font-size: 12px; font-weight: 700; color: var(--text-3); margin-bottom: var(--s2); }
+.td__judge { display: flex; align-items: center; gap: 6px; font-size: 13px; margin-bottom: var(--s2); }
+.td__docs li { display: flex; justify-content: space-between; font-size: 13px; padding: 2px 0; }
+.td__similar li { padding: var(--s2) 0; border-top: 1px dashed var(--border); font-size: 13px; }
+.td__similar li:first-child { border-top: 0; padding-top: 0; }
+.td__sq { font-weight: 600; }
+.td__sr { color: var(--text-2); white-space: pre-line; margin: 2px 0; }
+#td-text { width: 100%; font: inherit; font-size: 14px; line-height: 1.6; padding: var(--s2) var(--s3); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); resize: vertical; }
+#td-text:focus { outline: 2px solid var(--ring); outline-offset: 1px; }
+.td__actions { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); margin-top: var(--s2); font-size: 12px; }
+.td__sent { font-size: 14px; line-height: 1.6; background: var(--surface-2); border-radius: var(--radius-sm); padding: var(--s2) var(--s3); }
+.td__timeline { font-size: 12px; color: var(--text-2); display: grid; gap: 2px; }
+.td__timeline time { color: var(--text-3); font-variant-numeric: tabular-nums; margin-right: var(--s1); }
+
+/* ── 운영 탭: 자동 응대 ─────────────────── */
+.auto__title { font-size: 12px; font-weight: 600; color: var(--text-3); margin: var(--s3) 0 var(--s1); }
+.bars li { display: grid; grid-template-columns: 96px 1fr 24px; align-items: center; gap: var(--s2); font-size: 12px; padding: 2px 0; }
+.bars__track { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.bars__fill { display: block; height: 100%; border-radius: 3px; background: var(--warn); }
+.bars .num { text-align: right; font-variant-numeric: tabular-nums; }
+.auto__link { margin-top: var(--s2); font-size: 12px; }
+
 /* ── 반응형 ───────────────────────────── */
 @media (max-width: 960px) {
-  .agent, .ops__grid { grid-template-columns: minmax(0, 1fr); }
+  .agent, .ops__grid, .inbox { grid-template-columns: minmax(0, 1fr); }
+  .inbox__list { position: static; max-height: 360px; }
   .agent__aside { position: static; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .docs { grid-template-columns: minmax(0, 1fr); gap: var(--s3); }
