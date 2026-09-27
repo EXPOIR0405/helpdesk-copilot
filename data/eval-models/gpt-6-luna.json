@@ -2,34 +2,34 @@
   "model": "gpt-6-luna",
   "runs": 3,
   "pricesCheckedAt": "2026-09-27",
-  "at": "2026-09-27T12:39:40.522Z",
+  "at": "2026-09-27T13:02:00.589Z",
   "total": 126,
   "retrievalHit": {
     "n": 102,
     "d": 105
   },
   "statusAccuracy": {
-    "n": 115,
+    "n": 117,
     "d": 126
   },
   "wrongAnswer": {
-    "n": 2,
+    "n": 0,
     "d": 30
   },
   "overRefusal": {
     "n": 9,
     "d": 96
   },
-  "worstWrongAnswer": 1,
+  "worstWrongAnswer": 0,
   "errors": 0,
   "usage": {
     "calls": 126,
-    "inputTokens": 111795,
-    "outputTokens": 9393,
-    "costUsd": 0.015013259999999994,
-    "costPer1kQuestionsUsd": 0.11915285714285709,
-    "latencyP50Ms": 1544,
-    "latencyP95Ms": 2383
+    "inputTokens": 136617,
+    "outputTokens": 9088,
+    "costUsd": 0.012301520000000002,
+    "costPer1kQuestionsUsd": 0.09763111111111111,
+    "latencyP50Ms": 1639,
+    "latencyP95Ms": 3218
   },
   "misses": [
     {
@@ -46,21 +46,7 @@
       "id": "q42",
       "expected": "answered",
       "missedRuns": 3
-    },
-    {
-      "id": "q41",
-      "expected": "unanswerable",
-      "missedRuns": 2
     }
   ],
-  "unstable": [
-    {
-      "id": "q41",
-      "statuses": [
-        "unanswerable",
-        "answered",
-        "answered"
-      ]
-    }
-  ]
+  "unstable": []
 }
