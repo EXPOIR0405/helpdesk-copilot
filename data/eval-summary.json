@@ -1,8 +1,8 @@
 {
   "model": "gemini-3.8-flash",
   "runs": 3,
-  "promptVersion": "c89e765b",
-  "at": "2026-09-27T13:00:43.167Z",
+  "promptVersion": "89b8cea4",
+  "at": "2026-09-27T14:08:46.868Z",
   "total": 126,
   "retrievalHit": {
     "n": 102,

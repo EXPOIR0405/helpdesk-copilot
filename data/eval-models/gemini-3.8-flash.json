@@ -1,9 +1,9 @@
 {
   "model": "gemini-3.8-flash",
   "runs": 3,
-  "promptVersion": "c89e765b",
+  "promptVersion": "89b8cea4",
   "pricesCheckedAt": "2026-09-27",
-  "at": "2026-09-27T13:00:43.167Z",
+  "at": "2026-09-27T14:08:46.868Z",
   "total": 126,
   "retrievalHit": {
     "n": 102,
@@ -25,12 +25,12 @@
   "errors": 0,
   "usage": {
     "calls": 126,
-    "inputTokens": 125553,
-    "outputTokens": 11542,
-    "costUsd": 0.13744724999999997,
-    "costPer1kQuestionsUsd": 1.0908511904761902,
-    "latencyP50Ms": 1663,
-    "latencyP95Ms": 2646
+    "inputTokens": 136263,
+    "outputTokens": 12517,
+    "costUsd": 0.14913600000000002,
+    "costPer1kQuestionsUsd": 1.1836190476190478,
+    "latencyP50Ms": 1655,
+    "latencyP95Ms": 2124
   },
   "misses": [
     {

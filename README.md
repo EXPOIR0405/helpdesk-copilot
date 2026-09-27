@@ -35,7 +35,8 @@
   - [확정 답변](https://helpdesk-copilot.vercel.app/?q=%EC%95%84%EC%9D%B4%ED%8F%B0%EC%97%90%EC%84%9C%20%EA%B2%B0%EC%A0%9C%ED%95%9C%20%EC%82%AC%EB%9E%8C%EC%9D%80%20%ED%99%98%EB%B6%88%20%EC%96%B4%EB%94%94%EC%84%9C%20%ED%95%B4%EC%9A%94%3F&reply=1): "아이폰에서 결제한 사람은 환불 어디서 해요?"
   - [준비 중 정책](https://helpdesk-copilot.vercel.app/?q=%EA%B4%91%EA%B3%A0%ED%98%95%20%EC%9A%94%EA%B8%88%EC%A0%9C%EB%8A%94%20%EC%96%BC%EB%A7%88%EC%98%88%EC%9A%94%3F&reply=1): "광고형 요금제는 얼마예요?"
   - [근거 없음](https://helpdesk-copilot.vercel.app/?q=%ED%95%99%EC%83%9D%20%ED%95%A0%EC%9D%B8%20%EC%9E%88%EB%82%98%EC%9A%94%3F&reply=1): "학생 할인 있나요?"
-- 탭: 상담 · 정책 문서 · 운영
+- 탭: 상담 · **고객 문의** · **문의함** · 정책 문서 · 운영
+- [고객 문의](https://helpdesk-copilot.vercel.app/#/support)에서 문의를 보내면 확실한 정책 질문은 AI가 바로 답하고, 나머지는 판단 근거·가까운 문서·비슷한 과거 처리·답장 초안을 모아 [문의함](https://helpdesk-copilot.vercel.app/#/inbox)으로 넘김
 - 호출 한도를 넘거나 서버에 닿지 못하면 평가 때 저장한 실제 응답으로 동작하는 목업 모드로 전환
 
 ---
@@ -160,6 +161,26 @@ flowchart LR
   - 답장은 `answerId`로만 요청받아 서버에 저장된 답변만 모델에 들어감
 - 상세: [architecture.md](architecture.md) (다이어그램 5개, 설계 결정 15개, 평가 기록)
 
+### 자동 응대: 확실한 것만 스스로, 나머지는 맥락과 함께 사람에게
+
+```mermaid
+flowchart LR
+  C["고객 문의"] --> P["개인정보 가림"] --> J["판단 + 답장 초안"]
+  J --> R{"자동 발송 기준"}
+  R -- 통과 --> A["자동 답장"]
+  R -- "조치 요청 · 근거 없음 · 준비 중<br/>저확신 · 근거 밖 숫자" --> I["문의함<br/>판단·문서·비슷한 과거·초안"]
+  I --> N["n8n → Slack 상담원 알림"]
+  I --> H["상담원 답장·종결"]
+  A --> V["사후 검수 → 평가셋 후보"]
+```
+
+- 사람 확인 없이 고객에게 나가므로 기준은 보수적으로, 코드 한 곳(`src/core/triage.ts`)에
+  - "환불은 어디서 해요?"(질문)는 자동, "환불해 주세요"(조치 요청)는 답이 맞아도 사람에게
+- 상담원이 다른 화면을 찾지 않게 맥락을 모아 넘김: AI 판단·확신도, 가까운 문서, 질문 의미가 비슷한 처리 완료 티켓, 고쳐 보낼 답장 초안
+- 판단은 API 코드(테스트·평가 대상), n8n은 연결(넘김 알림 · 10분마다 SLA 30분 초과 알림)
+  - n8n이 꺼져 있으면 API가 Slack으로 직접 → 알림이 사라지지 않음
+- 상세: [docs/auto-response-design.md](docs/auto-response-design.md), [n8n/README.md](n8n/README.md)
+
 ## 5. 결과
 
 ### 평가
@@ -185,9 +206,22 @@ flowchart LR
   - 같은 벡터로 비교하면 pgvector와 로컬 계산이 42/42 동일
   - 차이는 같은 텍스트를 다시 임베딩할 때 생기는 미세한 벡터 차이 → 해시 기반 증분 동기화가 결과 안정성에도 기여
 
+### 자동 응대 평가
+
+- 고객 말투 22문항 × 3회: 자동으로 답해도 되는 정책 질문 11 · 근거 없음 4 · 준비 중 1 · 조치 요청 6 (비슷한 말 다른 의도 쌍 포함)
+
+| 지표 | 기본 gemini-3.8-flash | 대체 gpt-5.4-mini |
+|---|:---:|:---:|
+| **잘못된 자동 발송** (넘겨야 하는데 자동) | **0/33** | **0/33** |
+| 조치 요청 분류 | 18/18 | 18/18 |
+| 넘김 사유 일치 | 33/33 | 33/33 |
+| 자동 처리율 | 72.7% (24/33) | 72.7% (24/33) |
+
+- 자동으로 못 보낸 3문항은 모두 저확신(근거는 충분하지만 고객 말투라 검색 유사도가 기준 아래). 잘못된 자동 발송 0을 우선해 1차는 보수적으로
+
 ### 테스트
 
-- 단위 테스트 74개 (vitest): 코드 가드, 확신도, 증분 동기화, 답장 숫자 검사, API 제한·캐시·인증, 대체 모델 전환, 알림 중복 방지, 비용 집계, 헬스체크
+- 단위 테스트 100개 (vitest): 코드 가드, 확신도, 증분 동기화, 답장 숫자 검사, API 제한·캐시·인증, 대체 모델 전환, 알림 중복 방지, 비용 집계, 헬스체크, 자동 발송 기준, 개인정보 가림, 티켓 수명 주기·SLA, n8n 인증
 - 단위 테스트는 가짜 임베더로 API 호출 없이, 평가는 실제 모델과 실제 저장소로
 
 ## 6. 배운 것
@@ -197,7 +231,7 @@ flowchart LR
 - **그럴듯한 개선도 평가셋 앞에서는 손해일 수 있음**: 질문 재작성은 한 문항을 고치고 다른 문항을 망가뜨림
 - **제한값은 배포해서 직접 써 보고 정함**: 분당 6회로 시작했다가 실제 사용 패턴을 보고 역할별 3단 제한으로
 - **실패를 안전한 쪽으로 채점하면 장애가 성과로 보임**: 호출 126건이 전부 404인 모델이 잘못된 답변률 0%로 비교표 1위에 오를 뻔함
-- 전체 16개: [docs/lessons.md](docs/lessons.md)
+- 전체 18개: [docs/lessons.md](docs/lessons.md)
 
 ---
 
@@ -218,21 +252,24 @@ npm run dev                 # http://localhost:3000
 | `npm run ask -- "질문"` | CLI로 질문 |
 | `npm run eval -- --model <id> --runs 3` | 평가셋 42문항을 모델별로 여러 회 실행, 지표·틀린 문항·흔들린 문항·비용·지연 출력 |
 | `npm run compare` | 모델별 평가 결과 비교표 |
+| `npm run eval:triage -- --model <id> --runs 3` | 자동 응대 평가 22문항: 잘못된 자동 발송·자동 처리율·조치 요청 분류 |
 | `npm test` | 단위 테스트 |
 | `npm run mock` | 평가 결과로 목업 데이터 생성 |
 | `npm run build` | Vercel Build Output 생성 |
 
-- 배포: Supabase에 `supabase/migrations/*.sql` 실행 → `.env`에 Supabase 값 → `npm run sync` → Vercel 연결 (빌드 명령 `npm run build`, 환경 변수 `OPENAI_API_KEY` · `GEMINI_API_KEY` · `SUPABASE_URL` · `SUPABASE_SECRET_KEY` · `CRON_SECRET` · `SLACK_WEBHOOK_URL`, 선택 `GENERATION_MODEL` · `FALLBACK_MODEL`)
+- 배포: Supabase에 `supabase/migrations/*.sql` 실행 → `.env`에 Supabase 값 → `npm run sync` → Vercel 연결 (빌드 명령 `npm run build`, 환경 변수 `OPENAI_API_KEY` · `GEMINI_API_KEY` · `SUPABASE_URL` · `SUPABASE_SECRET_KEY` · `CRON_SECRET` · `SLACK_WEBHOOK_URL`, 선택 `GENERATION_MODEL` · `FALLBACK_MODEL` · `N8N_WEBHOOK_URL` · `HELPDESK_N8N_SECRET`)
+- n8n 워크플로우: [n8n/README.md](n8n/README.md)
 
 ## 저장소 구조
 
 ```
-src/core/            검색 · 판단 · 확신도 · 답장 · 동기화 (저장소에 의존하지 않는 로직)
+src/core/            검색 · 판단 · 확신도 · 답장 · 동기화 · 자동 발송 기준 · 티켓 (저장소에 의존하지 않는 로직)
 src/server/          API 핸들러, 저장소 구현(Supabase·메모리), Vercel 진입점
 src/web/public/      정적 화면 (프레임워크 없음)
-data/synthetic/      가상 정책 문서 12개, 평가셋 42문항
+data/synthetic/      가상 정책 문서 12개, 평가셋 42문항, 자동 응대 평가셋 22문항
 supabase/migrations/ DB 스키마
-scripts/             sync · ask · eval · mock · dev · build
+scripts/             sync · ask · eval · eval-triage · compare · mock · dev · build
+n8n/                 n8n 워크플로우 (넘김 알림 · SLA 알림)
 test/                단위 테스트
 docs/                설계 문서, 배운 것, README 이미지
 ```
@@ -241,6 +278,8 @@ docs/                설계 문서, 배운 것, README 이미지
 
 - [architecture.md](architecture.md): 다이어그램, 설계 결정과 이유, 평가 기록
 - [docs/model-selection.md](docs/model-selection.md): 생성 모델 10개 비교 실험과 선택 이유
+- [docs/auto-response-design.md](docs/auto-response-design.md): 자동 응대 설계와 1차 결과
+- [n8n/README.md](n8n/README.md): n8n 워크플로우 설정과 실행하며 알게 된 것
 - [docs/backlog.md](docs/backlog.md): 다음 단계 계획
 - [docs/design.md](docs/design.md): 설계 문서 (목표, 가상 회사 설정, 화면 구성, 단계 계획)
 - [docs/lessons.md](docs/lessons.md): 설계·평가·배포하며 배운 것

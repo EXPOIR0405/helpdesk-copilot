@@ -1,0 +1,162 @@
+{
+  "id": "hdSlaReminder001",
+  "name": "helpdesk · SLA 알림",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "b2f0c0de-0002-4000-8000-000000000001",
+      "name": "10분마다",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b2f0c0de-0002-4000-8000-000000000005",
+      "name": "수동 실행 (테스트)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.HELPDESK_API_URL }}/api/tickets-overdue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-helpdesk-secret",
+              "value": "={{ $env.HELPDESK_N8N_SECRET }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "b2f0c0de-0002-4000-8000-000000000002",
+      "name": "SLA 초과 티켓 조회",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ],
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: ':hourglass: [helpdesk] SLA 초과 · ' + $json.waitingMinutes + '분 대기 · ' + $json.reasonLabel, blocks: [ { type: 'section', text: { type: 'mrkdwn', text: ':hourglass: *SLA 초과 · ' + $json.waitingMinutes + '분 대기* (' + $json.reasonLabel + ')\\n>' + $json.question } }, { type: 'context', elements: [ { type: 'mrkdwn', text: '<' + $json.url + '|문의함에서 열기>  ·  via n8n' } ] } ] }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "b2f0c0de-0002-4000-8000-000000000003",
+      "name": "Slack 알림",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.HELPDESK_API_URL }}/api/ticket-event",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-helpdesk-secret",
+              "value": "={{ $env.HELPDESK_N8N_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id: $('SLA 초과 티켓 조회').item.json.id, type: 'sla_reminded', via: 'n8n' }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "b2f0c0de-0002-4000-8000-000000000004",
+      "name": "알림 기록",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "10분마다": {
+      "main": [
+        [
+          {
+            "node": "SLA 초과 티켓 조회",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SLA 초과 티켓 조회": {
+      "main": [
+        [
+          {
+            "node": "Slack 알림",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack 알림": {
+      "main": [
+        [
+          {
+            "node": "알림 기록",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "수동 실행 (테스트)": {
+      "main": [
+        [
+          {
+            "node": "SLA 초과 티켓 조회",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

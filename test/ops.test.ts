@@ -6,7 +6,7 @@ import { failureEntry, memoryUsageLog, summarizeDaily, toEntry } from "../src/co
 import { memoryQuota } from "../src/server/stores.ts";
 
 const usage = (model: string): Usage => ({ model, inputTokens: 100, cachedInputTokens: 0, outputTokens: 10, latencyMs: 500 });
-const verdict: ModelVerdict = { status: "answered", text: "답", grounding: "full", citedChunkIds: ["a#0"] };
+const verdict: ModelVerdict = { status: "answered", text: "답", grounding: "full", citedChunkIds: ["a#0"], requestType: "question" };
 const err = (status?: number, message = "x") => Object.assign(new Error(message), { status });
 
 function model(id: string, fail?: unknown): ModelCalls {

@@ -13,7 +13,9 @@ export const INSTRUCTIONS = `당신은 OTT 서비스 시네웨이브 고객센�
 4. 답할 수 있으면 status를 "answered"로 합니다. 조각에 "없음", "불가"처럼 명시된 사실도 답이 됩니다.
 5. 상담원이 고객에게 바로 전할 수 있게 짧게 씁니다. 조건에 따라 답이 갈리면 조건별로 나눕니다.
 6. grounding: 질문의 모든 요소가 근거에 명시되어 있으면 "full", 일부만 있으면 "partial", 없으면 "none".
-7. citedChunkIds에는 답에 실제로 사용한 조각 id만 넣습니다.`;
+7. citedChunkIds에는 답에 실제로 사용한 조각 id만 넣습니다.
+8. requestType: 고객이 정책·방법·가능 여부를 묻는 것이면 "question", 고객 계정·결제에 직접 조치해 달라는 요청이면 "action"입니다.
+   예: "이용권은 어디서 등록해요?"는 question, "이 이용권 제 계정에 등록해 주세요"는 action. requestType은 status 판단에 영향을 주지 않습니다.`;
 
 export function buildInput(question: string, chunks: ScoredChunk[]): string {
   const blocks = chunks.map(
@@ -26,11 +28,12 @@ export function buildInput(question: string, chunks: ScoredChunk[]): string {
 export const VERDICT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["status", "text", "grounding", "citedChunkIds"],
+  required: ["status", "text", "grounding", "citedChunkIds", "requestType"],
   properties: {
     status: { type: "string", enum: ["answered", "pending_policy", "unanswerable"] },
     text: { type: "string" },
     grounding: { type: "string", enum: ["full", "partial", "none"] },
     citedChunkIds: { type: "array", items: { type: "string" } },
+    requestType: { type: "string", enum: ["question", "action"] },
   },
 } as const;

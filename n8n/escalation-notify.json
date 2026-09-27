@@ -1,0 +1,91 @@
+{
+  "id": "hdEscalateNotify",
+  "name": "helpdesk · 넘김 알림",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "helpdesk-escalated",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1f0c0de-0001-4000-8000-000000000001",
+      "name": "넘김 이벤트 수신",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "helpdesk-escalated"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.headers['x-helpdesk-secret'] }}",
+              "rightValue": "={{ $env.HELPDESK_N8N_SECRET }}",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.body.event }}",
+              "rightValue": "ticket.escalated",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1f0c0de-0001-4000-8000-000000000002",
+      "name": "비밀값·이벤트 확인",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: ':incoming_envelope: [helpdesk] 상담원 확인 필요 · ' + $json.body.ticket.reasonLabel, blocks: [ { type: 'section', text: { type: 'mrkdwn', text: ':incoming_envelope: *상담원 확인 필요 · ' + $json.body.ticket.reasonLabel + '*\\n>' + $json.body.ticket.question } }, { type: 'context', elements: [ { type: 'mrkdwn', text: '가까운 문서: ' + ($json.body.ticket.nearestDoc || '-') + '  ·  <' + $json.body.ticket.url + '|문의함에서 열기>  ·  via n8n' } ] } ] }) }}",
+        "options": { "timeout": 5000 }
+      },
+      "id": "a1f0c0de-0001-4000-8000-000000000003",
+      "name": "Slack 상담원 채널",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, -100]
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={\"ok\": true}", "options": { "responseCode": 200 } },
+      "id": "a1f0c0de-0001-4000-8000-000000000004",
+      "name": "200 응답",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [700, -100]
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={\"ok\": false}", "options": { "responseCode": 401 } },
+      "id": "a1f0c0de-0001-4000-8000-000000000005",
+      "name": "401 응답",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [460, 100]
+    }
+  ],
+  "connections": {
+    "넘김 이벤트 수신": { "main": [[{ "node": "비밀값·이벤트 확인", "type": "main", "index": 0 }]] },
+    "비밀값·이벤트 확인": {
+      "main": [
+        [{ "node": "Slack 상담원 채널", "type": "main", "index": 0 }],
+        [{ "node": "401 응답", "type": "main", "index": 0 }]
+      ]
+    },
+    "Slack 상담원 채널": { "main": [[{ "node": "200 응답", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}

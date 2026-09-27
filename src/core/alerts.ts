@@ -1,5 +1,5 @@
 export type Alert = {
-  level: "warn" | "error";
+  level: "info" | "warn" | "error";
   /** 같은 key는 중복 방지 창 안에서 한 번만 보냄 */
   key: string;
   title: string;
@@ -51,7 +51,7 @@ export function slackSink(webhookUrl: string, service: string, fetchImpl: typeof
 }
 
 export function slackPayload(a: Alert, service: string) {
-  const icon = a.level === "error" ? ":rotating_light:" : ":warning:";
+  const icon = a.level === "error" ? ":rotating_light:" : a.level === "warn" ? ":warning:" : ":incoming_envelope:";
   const fields = Object.entries(a.detail).map(([k, v]) => `*${k}*: ${v}`).join("\n");
   return {
     text: `${icon} [${service}] ${a.title}`,

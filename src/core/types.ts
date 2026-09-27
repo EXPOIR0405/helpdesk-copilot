@@ -28,6 +28,9 @@ export type Confidence = "high" | "medium" | "low";
 
 export type Grounding = "full" | "partial" | "none";
 
+/** 정책을 묻는 것(question)인지, 고객 계정·결제에 조치를 요청하는 것(action)인지. 자동 응대에서 action은 항상 상담원에게 */
+export type RequestType = "question" | "action";
+
 export type Citation = {
   chunkId: string;
   docId: string;
@@ -40,6 +43,8 @@ export type Answer = {
   status: AnswerStatus;
   text: string;
   confidence: Confidence;
+  /** 모델을 부르지 않았거나(검색 결과 없음) 이전 기록이면 없음 */
+  requestType?: RequestType;
   citations: Citation[];
   trace: {
     topScore: number;
@@ -72,6 +77,7 @@ export type ModelVerdict = {
   text: string;
   grounding: Grounding;
   citedChunkIds: string[];
+  requestType: RequestType;
 };
 
 /** 질문 벡터로 가까운 조각을 찾음. 로컬은 메모리 코사인, 배포는 pgvector (같은 코사인 계산) */

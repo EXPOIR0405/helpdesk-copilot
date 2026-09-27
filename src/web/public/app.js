@@ -124,23 +124,27 @@ const api = {
 
 /* ── 라우팅 ───────────────────────────── */
 
-/** #/ · #/docs · #/docs/<문서id>?s=<섹션> · #/ops */
+/** #/ · #/support · #/inbox/<티켓id> · #/docs · #/docs/<문서id>?s=<섹션> · #/ops */
 function parseHash() {
   const [path, query = ""] = location.hash.slice(1).split("?");
   const parts = path.split("/").filter(Boolean);
-  const name = parts[0] === "ops" ? "ops" : parts[0] === "docs" ? "docs" : "agent";
-  return { name, docId: parts[1] ? decodeURIComponent(parts[1]) : null, section: new URLSearchParams(query).get("s") };
+  const name = ["ops", "docs", "support", "inbox"].includes(parts[0]) ? parts[0] : "agent";
+  const id = parts[1] ? decodeURIComponent(parts[1]) : null;
+  return { name, docId: id, ticketId: id, section: new URLSearchParams(query).get("s") };
 }
 
 function route() {
-  const { name, docId, section } = parseHash();
-  for (const v of ["agent", "docs", "ops"]) $(`#view-${v}`).hidden = name !== v;
+  const { name, docId, ticketId, section } = parseHash();
+  for (const v of ["agent", "support", "inbox", "docs", "ops"]) $(`#view-${v}`).hidden = name !== v;
   for (const a of document.querySelectorAll(".tabs__link")) {
     if (a.dataset.route === name) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   }
-  document.title = `${{ ops: "운영 현황", docs: "정책 문서", agent: "상담" }[name]} · CineWave 상담 코파일럿`;
+  document.title = `${{ ops: "운영 현황", docs: "정책 문서", agent: "상담", support: "고객 문의", inbox: "문의함" }[name]} · CineWave 상담 코파일럿`;
   if (name === "ops") renderOps();
+  // support.js
+  if (name === "support") window.renderSupport?.();
+  if (name === "inbox") window.renderInbox?.(ticketId);
   if (name === "docs") renderDocs(docId, section);
 }
 
@@ -402,6 +406,7 @@ async function renderOps() {
     : `<p class="muted">아직 기록된 미답변 질문이 없습니다.</p>`;
 
   renderCost(ops);
+  window.renderSupportStats?.();
 
   const ev = ops.eval;
   const pct = ({ n, d }) => (d ? `${((n / d) * 100).toFixed(1)}%<small>${n}/${d}</small>` : "-");

@@ -1,0 +1,56 @@
+{
+  "model": "gemini-3.8-flash",
+  "runs": 3,
+  "promptVersion": "89b8cea4",
+  "at": "2026-09-27T14:05:39.826Z",
+  "wrongAuto": {
+    "n": 0,
+    "d": 33
+  },
+  "autoRate": {
+    "n": 24,
+    "d": 33
+  },
+  "reasonMatch": {
+    "n": 33,
+    "d": 33
+  },
+  "actionRecall": {
+    "n": 18,
+    "d": 18
+  },
+  "questionPrecision": {
+    "n": 48,
+    "d": 48
+  },
+  "errors": 0,
+  "misses": [
+    {
+      "id": "t02",
+      "expected": "auto",
+      "got": [
+        "escalate:low_confidence",
+        "escalate:low_confidence",
+        "escalate:low_confidence"
+      ]
+    },
+    {
+      "id": "t08",
+      "expected": "auto",
+      "got": [
+        "escalate:low_confidence",
+        "escalate:low_confidence",
+        "escalate:low_confidence"
+      ]
+    },
+    {
+      "id": "t09",
+      "expected": "auto",
+      "got": [
+        "escalate:low_confidence",
+        "escalate:low_confidence",
+        "escalate:low_confidence"
+      ]
+    }
+  ]
+}
