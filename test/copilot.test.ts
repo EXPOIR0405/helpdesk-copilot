@@ -43,6 +43,13 @@ describe("copilot.ask", () => {
     expect(log.entries).toHaveLength(0);
   });
 
+  it("모델 호출 기록을 trace에 남김 (비용·지연 집계용)", async () => {
+    const usage = { model: "gpt-5.4-mini", inputTokens: 900, cachedInputTokens: 0, outputTokens: 120, latencyMs: 800 };
+    const { copilot } = await setup({ usage } as Partial<ModelVerdict>);
+    expect((await copilot.ask("환불 되나요?")).trace.usage).toEqual(usage);
+    expect((await copilot.ask("학생 할인 있나요?")).trace.usage).toBeUndefined();
+  });
+
   it("검색 결과가 없으면 모델을 부르지 않고 거절, 미답변 기록", async () => {
     const { copilot, generate, log } = await setup({});
     const a = await copilot.ask("학생 할인 있나요?");

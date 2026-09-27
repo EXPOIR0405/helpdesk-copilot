@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { buildInput, INSTRUCTIONS, VERDICT_SCHEMA } from "./prompt.ts";
 import type { ReplyGenerator } from "./reply.ts";
-import type { Embedder, Generator, ModelVerdict } from "./types.ts";
+import type { Embedder, Generator, ModelVerdict, Usage } from "./types.ts";
 
 export function openAIEmbedder(client: OpenAI, model: string): Embedder {
   return async (texts) => {
@@ -12,6 +12,7 @@ export function openAIEmbedder(client: OpenAI, model: string): Embedder {
 
 export function openAIGenerator(client: OpenAI, model: string): Generator {
   return async (question, chunks) => {
+    const started = Date.now();
     const res = await client.responses.create({
       model,
       instructions: INSTRUCTIONS,
@@ -21,7 +22,15 @@ export function openAIGenerator(client: OpenAI, model: string): Generator {
         format: { type: "json_schema", name: "verdict", strict: true, schema: VERDICT_SCHEMA },
       },
     });
-    return JSON.parse(res.output_text) as ModelVerdict;
+    const usage: Usage = {
+      model,
+      inputTokens: res.usage?.input_tokens ?? 0,
+      cachedInputTokens: res.usage?.input_tokens_details?.cached_tokens ?? 0,
+      // reasoning 토큰은 output_tokens에 이미 포함
+      outputTokens: res.usage?.output_tokens ?? 0,
+      latencyMs: Date.now() - started,
+    };
+    return { ...(JSON.parse(res.output_text) as ModelVerdict), usage };
   };
 }
 

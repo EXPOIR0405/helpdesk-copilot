@@ -3,8 +3,10 @@ export const config = {
   indexPath: "data/index/index.json",
   unansweredLogPath: "data/logs/unanswered.jsonl",
   models: {
+    // 임베딩을 바꾸면 전체 재동기화가 필요하고 검색 결과도 달라짐 → 생성 모델 비교 때는 고정
     embedding: "text-embedding-3-small",
-    generation: "gpt-5.4-mini",
+    // 후보와 가격은 src/core/models.ts. GENERATION_MODEL 환경 변수로 배포 없이 교체
+    generation: process.env.GENERATION_MODEL || "gpt-5.4-mini",
   },
   chunk: {
     maxChars: 700,

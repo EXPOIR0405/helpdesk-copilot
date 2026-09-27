@@ -1,5 +1,6 @@
 import { groupByNearestDoc, type UnansweredEntry } from "./unanswered.ts";
-import type { Answer, AnswerStatus, DocStatus } from "./types.ts";
+import { costUsd } from "./models.ts";
+import type { Answer, AnswerStatus, DocStatus, Usage } from "./types.ts";
 
 export type EvalRow = {
   q: { id: string; type: string; question: string; expected_status: AnswerStatus; expected_docs: string[] };
@@ -33,6 +34,33 @@ export function summarizeEval(rows: EvalRow[], at: Date): EvalSummary {
     statusAccuracy: ratio(rows, (r) => r.a.status === r.q.expected_status),
     wrongAnswer: ratio(shouldNotAnswer, (r) => r.a.status === "answered"),
     overRefusal: ratio(shouldAnswer, (r) => r.a.status === "unanswerable"),
+  };
+}
+
+export type UsageStats = {
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  /** 질문 1,000건 비용. 검색 결과가 없어 모델을 안 부른 질문도 분모에 포함 → 실제 운영 단가 */
+  costPer1kQuestionsUsd: number;
+  latencyP50Ms: number;
+  latencyP95Ms: number;
+};
+
+export function summarizeUsage(usages: Usage[], questions: number): UsageStats {
+  const sum = (f: (u: Usage) => number) => usages.reduce((s, u) => s + f(u), 0);
+  const latencies = usages.map((u) => u.latencyMs).sort((a, b) => a - b);
+  const pct = (p: number) => (latencies.length ? latencies[Math.min(latencies.length - 1, Math.ceil(p * latencies.length) - 1)] : 0);
+  const cost = sum(costUsd);
+  return {
+    calls: usages.length,
+    inputTokens: sum((u) => u.inputTokens),
+    outputTokens: sum((u) => u.outputTokens),
+    costUsd: cost,
+    costPer1kQuestionsUsd: questions ? (cost / questions) * 1000 : 0,
+    latencyP50Ms: pct(0.5),
+    latencyP95Ms: pct(0.95),
   };
 }
 

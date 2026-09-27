@@ -1,7 +1,8 @@
 import OpenAI from "openai";
 import { config } from "./config.ts";
 import { createCopilot } from "./core/copilot.ts";
-import { openAIEmbedder, openAIGenerator, openAIReplyGenerator } from "./core/openai.ts";
+import { openAIEmbedder } from "./core/openai.ts";
+import { createGenerationModel } from "./providers.ts";
 import { createReplyWriter } from "./core/reply.ts";
 import { buildOps, type EvalSummary } from "./core/report.ts";
 import { memorySearch } from "./core/retrieve.ts";
@@ -85,26 +86,27 @@ export function selectBackend(): Backend {
 }
 
 /** 스크립트·API가 공통으로 쓰는 조립 지점 */
-export async function createRuntime(opts: { log?: UnansweredLog } = {}) {
+export async function createRuntime(opts: { log?: UnansweredLog; generationModel?: string } = {}) {
   const backend = selectBackend();
-  const client = new OpenAI();
   const log = opts.log ?? backend.log;
+  const model = createGenerationModel(opts.generationModel ?? config.models.generation);
+  const models = { embedding: config.models.embedding, generation: model.id };
   const copilot = createCopilot({
     search: await backend.search(),
-    embed: openAIEmbedder(client, config.models.embedding),
-    generate: openAIGenerator(client, config.models.generation),
+    embed: openAIEmbedder(new OpenAI(), config.models.embedding),
+    generate: model.generate,
     log,
     retrieval: config.retrieval,
     confidence: config.confidence,
   });
-  const replyWriter = createReplyWriter(openAIReplyGenerator(client, config.models.generation));
+  const replyWriter = createReplyWriter(model.reply);
 
   async function ops() {
     const [{ docs, syncedAt }, entries] = await Promise.all([backend.opsDocs(), backend.log.list()]);
     return buildOps({
       docs,
       syncedAt,
-      models: config.models,
+      models,
       unansweredEntries: entries,
       eval: evalSummary as EvalSummary,
     });
