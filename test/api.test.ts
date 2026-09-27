@@ -209,3 +209,15 @@ describe("사용량 기록·알림 (2단계)", () => {
     expect((await empty.call("GET", "/api/health")).status).toBe(503);
   });
 });
+
+describe("restoreRoutedPath (Vercel 함수 하나로 모든 /api/*)", async () => {
+  const { restoreRoutedPath } = await import("../src/server/node-adapter.ts");
+  it("__path로 원래 경로를 되살리고 원래 쿼리는 유지", () => {
+    expect(restoreRoutedPath("https://x/api/handler?__path=tickets&status=escalated")).toBe("https://x/api/tickets?status=escalated");
+    expect(restoreRoutedPath("https://x/api/handler?id=abc&__path=ticket")).toBe("https://x/api/ticket?id=abc");
+    expect(restoreRoutedPath("https://x/api/handler?__path=keepalive")).toBe("https://x/api/keepalive");
+  });
+  it("__path가 없으면(로컬 개발 서버) 그대로", () => {
+    expect(restoreRoutedPath("http://localhost:3000/api/ask")).toBe("http://localhost:3000/api/ask");
+  });
+});
