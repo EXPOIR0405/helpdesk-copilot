@@ -14,6 +14,7 @@
 ![OpenAI](https://img.shields.io/badge/OpenAI-412991?logo=openai&logoColor=white)
 ![Supabase pgvector](https://img.shields.io/badge/Supabase_pgvector-3ecf8e?logo=supabase&logoColor=white)
 ![n8n](https://img.shields.io/badge/n8n-ea4b71?logo=n8n&logoColor=white)
+![MCP](https://img.shields.io/badge/MCP_서버-191919?logo=anthropic&logoColor=white)
 ![Vercel](https://img.shields.io/badge/Vercel-000000?logo=vercel&logoColor=white)
 ![Slack](https://img.shields.io/badge/Slack_알림-4a154b?logo=slack&logoColor=white)
 ![Vitest](https://img.shields.io/badge/Vitest-6e9f18?logo=vitest&logoColor=white)
@@ -50,6 +51,7 @@
   - "프리미엄 몇 대까지 돼요?" → AI가 바로 답함
   - "어제 결제한 거 환불해 주세요" → 접수 안내 후 [문의함](https://helpdesk-copilot.vercel.app/#/inbox)으로. 판단 근거·가까운 문서·비슷한 과거 처리·답장 초안이 모여 있음
   - 문의함에서 초안을 고쳐 보내면 고객 문의 화면에 상담원 답장으로 나타남
+- **MCP**: Claude Desktop·Claude Code·Claude.ai에서 정책 질문·문의함 처리·운영 현황을 도구로 ([연결 방법](docs/mcp.md))
 - [운영](https://helpdesk-copilot.vercel.app/#/ops): 자동 처리율·넘김 사유, 오늘 비용·대체 모델 전환·실패, 품질 지표, 보강할 문서
 - 호출 한도를 넘거나 서버에 닿지 못하면 평가 때 저장한 실제 응답으로 동작하는 목업 모드로 전환
 
@@ -165,6 +167,15 @@ flowchart LR
 </tr>
 </table>
 
+### 3-3. MCP 서버: 다른 AI 도구에서 헬프데스크를 도구로
+
+- 도구 8개: 정책 질문 · 고객 답장 초안 · 정책 문서 목록/원문(섹션 단위) · 문의함 목록/상세 · 답장하고 종결 · 운영 현황
+  - 정책 문서는 `policy://<id>` 리소스로도
+- **도구 정의는 하나, 연결 방식은 둘**: 로컬 stdio(배포 API를 fetch, 모델 키 불필요)와 원격 `/api/mcp`(Streamable HTTP, 같은 핸들러를 내부 호출)
+- **MCP로 안전장치를 우회하지 않음**: 도구가 API를 거쳐서 호출 제한·입력 검사·사용량 기록·알림이 그대로. 원격은 호출자 IP를 넘겨 IP별 제한도 그대로
+- 고객에게 실제로 나가는 `reply_to_ticket`은 `destructiveHint`로 표시 → 클라이언트가 실행 전 확인
+- 연결 방법·설계: [docs/mcp.md](docs/mcp.md)
+
 ### 화면
 
 <table>
@@ -231,7 +242,7 @@ flowchart LR
 
 - **공개 데모 비용 방어**: IP별 분당 20회, IP별 하루 모델 호출 30회, 전체 하루 300회, 같은 질문 24시간 캐시, 질문 300자. 한도를 넘으면 오류 대신 목업 모드
 - **보안**: 모든 테이블 RLS를 켜고 정책을 두지 않음, DB 함수는 서버 역할만 실행. 답장은 `answerId`로만 요청받아 서버에 저장된 답변만 모델에. n8n 전용 경로는 공유 비밀값 헤더로
-- 상세: [architecture.md](architecture.md) (다이어그램, 설계 결정 17개, 평가 기록)
+- 상세: [architecture.md](architecture.md) (다이어그램, 설계 결정 18개, 평가 기록)
 
 ## 6. 결과
 
@@ -264,7 +275,7 @@ flowchart LR
 
 ### 테스트
 
-- 단위 테스트 102개 (vitest): 코드 가드, 확신도, 증분 동기화, 답장 숫자 검사, API 제한·캐시·인증, 대체 모델 전환·실패 분류, 알림 중복 방지, 비용 집계, 헬스체크, 자동 발송 기준, 개인정보 가림, 티켓 수명 주기·SLA, n8n 인증, 단일 함수 라우팅
+- 단위 테스트 112개 (vitest): 코드 가드, 확신도, 증분 동기화, 답장 숫자 검사, API 제한·캐시·인증, 대체 모델 전환·실패 분류, 알림 중복 방지, 비용 집계, 헬스체크, 자동 발송 기준, 개인정보 가림, 티켓 수명 주기·SLA, n8n 인증, 단일 함수 라우팅, MCP 도구·원격 경로
 - 단위 테스트는 가짜 임베더로 API 호출 없이, 평가는 실제 모델과 실제 저장소로
 
 ## 7. 운영하며 깨진 것과 고친 것
@@ -314,6 +325,7 @@ npm run dev                 # http://localhost:3000
 | `npm run eval -- --model <id> --runs 3` | 평가셋 42문항을 모델별로 여러 회 실행, 지표·틀린 문항·흔들린 문항·비용·지연 |
 | `npm run eval:triage -- --model <id> --runs 3` | 자동 응대 평가 22문항: 잘못된 자동 발송·자동 처리율·조치 요청 분류 |
 | `npm run compare` | 모델별 평가 결과 비교표 (프롬프트 버전 포함) |
+| `npm run mcp` | MCP 서버 (stdio). `HELPDESK_API_URL`로 대상 변경, 기본은 공개 데모 |
 | `npm test` | 단위 테스트 |
 | `npm run mock` | 평가 결과로 목업 데이터 생성 |
 | `npm run build` | Vercel Build Output 생성 |
@@ -333,6 +345,7 @@ data/synthetic/      가상 정책 문서 12개, 평가셋 42문항, 자동 응�
 data/eval-models/    모델별 평가 결과, data/eval-triage/ 자동 응대 평가 결과
 supabase/migrations/ DB 스키마 (문서·조각 · 사용량 · 티켓)
 scripts/             sync · ask · eval · eval-triage · compare · mock · dev · build
+src/mcp/            MCP 서버 (도구 정의 · stdio 진입점)
 n8n/                 n8n 워크플로우 (넘김 알림 · SLA 알림)
 test/                단위 테스트
 docs/                설계 문서, 모델 선택, 자동 응대 설계, 배운 것, 백로그
@@ -344,6 +357,7 @@ docs/                설계 문서, 모델 선택, 자동 응대 설계, 배운 
 - [docs/model-selection.md](docs/model-selection.md): 생성 모델 10개 비교 실험과 선택 이유
 - [docs/auto-response-design.md](docs/auto-response-design.md): 자동 응대 설계와 1차 결과
 - [n8n/README.md](n8n/README.md): n8n 워크플로우 설정과 실행하며 알게 된 것
+- [docs/mcp.md](docs/mcp.md): MCP 서버 도구·연결 방법·설계
 - [docs/lessons.md](docs/lessons.md): 설계·평가·배포·운영하며 배운 것 18개
 - [docs/backlog.md](docs/backlog.md): 다음 단계 계획
 - [docs/design.md](docs/design.md): 1단계 설계 문서 (목표, 가상 회사 설정, 화면 구성)

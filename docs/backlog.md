@@ -46,8 +46,9 @@
 
 ### 5단계 — MCP 서버
 
-- [ ] 코파일럿을 MCP 도구로 공개 (`ask_policy`, `list_policy_docs`, `get_unanswered`)
-- [ ] Claude Desktop 등에서 정책 조회 시연
+- [x] MCP 도구 8개 + 정책 문서 리소스 ([mcp.md](mcp.md)), 로컬 stdio · 원격 `/api/mcp`
+- [x] 실제 stdio 서버로 공개 데모 API 연결 확인
+- [ ] Claude Desktop·Claude.ai 커넥터에서 대화로 시연 (스크린샷·GIF)
 
 ### 상시 — 운영 기록
 

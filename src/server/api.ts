@@ -1,3 +1,5 @@
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { createHelpdeskMcpServer } from "../mcp/server.ts";
 import { describeError, type Alerter } from "../core/alerts.ts";
 import type { CustomerReply } from "../core/reply.ts";
 import type { OpsData } from "../core/report.ts";
@@ -318,9 +320,26 @@ export function createApi(deps: ApiDeps): Handler {
       await deps.keepalive();
       return json({ ok: true, at: now().toISOString() });
     },
+
+    // 원격 MCP (Streamable HTTP, 무상태): 도구 정의는 stdio와 같고, 도구가 이 API를 내부에서 그대로 호출
+    // → 호출 제한·입력 검사·사용량 기록을 우회하지 않음. 호출자 IP를 넘겨 IP별 제한도 그대로
+    "POST /api/mcp": async (req) => {
+      const forwarded = Object.fromEntries(
+        ["x-forwarded-for", "x-real-ip"].flatMap((h) => (req.headers.get(h) ? [[h, req.headers.get(h)!]] : [])),
+      );
+      const server = createHelpdeskMcpServer((path, init) =>
+        handle(new Request(`http://internal${path}`, { ...init, headers: { ...forwarded, ...(init?.headers as Record<string, string>) } })),
+      );
+      const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+      await server.connect(transport);
+      return transport.handleRequest(req);
+    },
+    // 무상태라 서버→클라이언트 스트림(GET)·세션 종료(DELETE)는 없음
+    "GET /api/mcp": async () => MCP_METHOD_NOT_ALLOWED(),
+    "DELETE /api/mcp": async () => MCP_METHOD_NOT_ALLOWED(),
   };
 
-  return async (req) => {
+  const handle: Handler = async (req) => {
     const route = routes[`${req.method} ${new URL(req.url).pathname}`];
     if (!route) return fail(404, "not_found", "없는 경로입니다.");
     try {
@@ -337,4 +356,11 @@ export function createApi(deps: ApiDeps): Handler {
       return fail(500, "server_error", "서버 오류가 발생했습니다.");
     }
   };
+  return handle;
 }
+
+const MCP_METHOD_NOT_ALLOWED = () =>
+  new Response(JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed (stateless server)" }, id: null }), {
+    status: 405,
+    headers: { "content-type": "application/json", allow: "POST" },
+  });
