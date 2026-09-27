@@ -296,6 +296,13 @@ erDiagram
 - 처음엔 경로마다 함수 폴더에 같은 번들을 복사 → 자동 응대 경로를 더해 13개가 되자 Hobby 플랜 "배포당 함수 12개" 한도로 배포 실패
 - 라우트가 원래 경로를 `__path` 쿼리로 넘기고 진입점(`restoreRoutedPath`)이 되살림 → 로컬 개발 서버와 같은 경로로 동작
 - 덤으로 배포 산출물이 줄고, 콜드 스타트가 함수 하나에서만 생김
+### 18. MCP 서버: 도구 정의 하나, 연결 방식 둘
+
+- 도구는 `HelpdeskFetch(path, init)`에만 의존 → stdio는 배포 API로 fetch, 원격 `/api/mcp`는 같은 `createApi` 핸들러를 내부 호출
+- 도구가 DB·모델을 직접 부르지 않고 API를 거침 → 호출 제한·입력 검사·캐시·사용량 기록·알림을 MCP로 우회할 수 없음. 원격은 호출자 IP를 내부 요청에 넘김
+- 원격은 무상태 Streamable HTTP(`WebStandardStreamableHTTPServerTransport`, 요청마다 서버 생성) → Vercel 함수 1개 그대로, 세션 저장소 불필요
+- 오류는 `isError` 도구 결과로, 되돌릴 수 없는 `reply_to_ticket`은 `destructiveHint`
+- 상세: [docs/mcp.md](docs/mcp.md)
 
 ## 평가 기록
 
