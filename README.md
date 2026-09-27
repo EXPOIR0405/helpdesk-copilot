@@ -154,6 +154,10 @@ flowchart LR
   - n8n은 흐름 연결: 넘김 알림, 10분마다 SLA 30분 초과 알림
   - n8n이 꺼져 있으면 API가 Slack으로 직접 보내고 실패를 기록 → 알림이 사라지지 않음
 - 공개 데모라 이메일·전화·카드·주민번호 형태는 모델 호출과 저장 전에 가림
+
+<img src="docs/assets/auto-response-demo.gif" alt="고객 문의 → AI 자동 응답 / 근거 없는 문의는 접수 안내 → 문의함에서 비슷한 과거 처리 확인 → 답장 수정·종결 → 고객 화면에 상담원 답장 도착 → 운영 탭" width="900">
+
+<sub>고객 문의(자동 응답·넘김) → 문의함(비슷한 과거 처리 유사도 0.55) → 초안 수정·종결 → 고객 화면에 도착 → 운영 탭</sub>
 - 상세: [docs/auto-response-design.md](docs/auto-response-design.md), [n8n/README.md](n8n/README.md)
 
 <table>
@@ -174,6 +178,7 @@ flowchart LR
 - **도구 정의는 하나, 연결 방식은 둘**: 로컬 stdio(배포 API를 fetch, 모델 키 불필요)와 원격 `/api/mcp`(Streamable HTTP, 같은 핸들러를 내부 호출)
 - **MCP로 안전장치를 우회하지 않음**: 도구가 API를 거쳐서 호출 제한·입력 검사·사용량 기록·알림이 그대로. 원격은 호출자 IP를 넘겨 IP별 제한도 그대로
 - 고객에게 실제로 나가는 `reply_to_ticket`은 `destructiveHint`로 표시 → 클라이언트가 실행 전 확인
+- **시연**: Claude Code에 "운영 현황 요약 · 오래 기다린 문의 답장 다듬기 · 인앱결제 환불 안내"를 맡기자 도구 8번으로 34초 만에 처리. 자동 응대 초안이 "전액 환불 가능"으로 **확인 전에 단정한 것**을 원문과 대조해 잡아냄 → [docs/mcp-demo.md](docs/mcp-demo.md)
 - 연결 방법·설계: [docs/mcp.md](docs/mcp.md)
 
 ### 화면
@@ -358,6 +363,7 @@ docs/                설계 문서, 모델 선택, 자동 응대 설계, 배운 
 - [docs/auto-response-design.md](docs/auto-response-design.md): 자동 응대 설계와 1차 결과
 - [n8n/README.md](n8n/README.md): n8n 워크플로우 설정과 실행하며 알게 된 것
 - [docs/mcp.md](docs/mcp.md): MCP 서버 도구·연결 방법·설계
+- [docs/mcp-demo.md](docs/mcp-demo.md): Claude Code가 MCP 도구로 운영·문의함·정책 업무를 처리한 실제 기록
 - [docs/lessons.md](docs/lessons.md): 설계·평가·배포·운영하며 배운 것 18개
 - [docs/backlog.md](docs/backlog.md): 다음 단계 계획
 - [docs/design.md](docs/design.md): 1단계 설계 문서 (목표, 가상 회사 설정, 화면 구성)
