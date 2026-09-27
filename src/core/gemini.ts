@@ -31,12 +31,13 @@ export function geminiGenerator(client: GoogleGenAI, model: string): Generator {
 
 export function geminiReplyGenerator(client: GoogleGenAI, model: string): ReplyGenerator {
   return async (instructions, input) => {
+    const started = Date.now();
     const res = await client.models.generateContent({
       model,
       contents: input,
       config: { systemInstruction: instructions, thinkingConfig: thinkingConfig(model) },
     });
-    return res.text ?? "";
+    return { text: res.text ?? "", usage: geminiUsage(model, res.usageMetadata, started) };
   };
 }
 

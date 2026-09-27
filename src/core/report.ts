@@ -1,6 +1,7 @@
 import { groupByNearestDoc, type UnansweredEntry } from "./unanswered.ts";
 import { costUsd } from "./models.ts";
 import type { Answer, AnswerStatus, DocStatus, Usage } from "./types.ts";
+import type { UsageDay } from "./usage.ts";
 
 export type EvalRow = {
   q: { id: string; type: string; question: string; expected_status: AnswerStatus; expected_docs: string[] };
@@ -78,10 +79,13 @@ export type OpsDoc = { id: string; title: string; status: DocStatus; updatedAt: 
 
 export type OpsData = {
   syncedAt: string | null;
-  models: { embedding: string; generation: string };
+  models: { embedding: string; generation: string; fallback?: string | null };
   docs: OpsDoc[];
   unanswered: (ReturnType<typeof groupByNearestDoc>[number] & { entries: UnansweredEntry[] })[];
   eval: EvalSummary | null;
+  /** 최근 7일 모델 호출 집계. 목업 데이터에는 없음 */
+  usage?: UsageDay[];
+  budget?: { dailyUsd: number; spentTodayUsd: number };
 };
 
 /** 운영 화면 데이터. 목업 생성과 API가 같은 계산을 씀 */

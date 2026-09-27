@@ -27,7 +27,8 @@ const questions: EvalQuestion[] = (await readFile("data/synthetic/eval/questions
   .map((l) => JSON.parse(l));
 
 // 평가 질문이 운영 미답변 리포트에 섞이지 않게 메모리 로그 사용
-const { copilot } = await createRuntime({ log: memoryUnansweredLog(), generationModel: model });
+// 한 모델만 재야 하므로 대체 모델 없음, 시간보다 완주 우선
+const { copilot } = await createRuntime({ log: memoryUnansweredLog(), generationModel: model, fallbackModel: null, calls: config.calls.eval });
 
 // 재시도까지 실패한 호출. 틀린 답은 아니지만 상태 정확도에서는 오답으로 셈 (운영에서 답을 못 준 것과 같음)
 const errors: { run: number; id: string; message: string }[] = [];

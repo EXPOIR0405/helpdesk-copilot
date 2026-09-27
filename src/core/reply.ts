@@ -1,12 +1,14 @@
-import type { Answer } from "./types.ts";
+import type { Answer, Usage } from "./types.ts";
 
 /** 확인된 답변을 고객에게 보낼 답장 초안으로 바꾸는 모델 호출 */
-export type ReplyGenerator = (instructions: string, input: string) => Promise<string>;
+export type ReplyGenerator = (instructions: string, input: string) => Promise<{ text: string; usage?: Usage }>;
 
 export type CustomerReply = {
   text: string;
   /** 근거에 없는 숫자. 있으면 상담원이 보내기 전에 확인해야 함 */
   unsupportedNumbers: string[];
+  /** 모델 호출 기록 (비용 집계용) */
+  usage?: Usage;
 };
 
 /** 모든 고객 답장의 첫 줄. 프롬프트로 지시하고, 모델이 어겨도 코드가 맞춤 */
@@ -77,9 +79,9 @@ export function withGreeting(text: string): string {
 export function createReplyWriter(generate: ReplyGenerator) {
   return {
     async write(question: string, answer: Answer): Promise<CustomerReply> {
-      const raw = await generate(REPLY_INSTRUCTIONS, buildReplyInput(question, answer));
+      const { text: raw, usage } = await generate(REPLY_INSTRUCTIONS, buildReplyInput(question, answer));
       const text = withGreeting(raw.replace(/[ \t]+$/gm, "").trim());
-      return { text, unsupportedNumbers: findUnsupportedNumbers(text, answer) };
+      return { text, unsupportedNumbers: findUnsupportedNumbers(text, answer), usage };
     },
   };
 }

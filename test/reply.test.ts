@@ -61,7 +61,7 @@ describe("withGreeting", () => {
 
 describe("replyWriter", () => {
   it("모델 출력을 다듬고 근거 밖 숫자를 표시", async () => {
-    const generate = vi.fn<ReplyGenerator>(async () => "  안녕하세요.  \n30일 이내 환불됩니다.  ");
+    const generate = vi.fn<ReplyGenerator>(async () => ({ text: "  안녕하세요.  \n30일 이내 환불됩니다.  " }));
     const reply = await createReplyWriter(generate).write("환불돼요?", answer());
     expect(reply).toEqual({ text: `${GREETING}\n30일 이내 환불됩니다.`, unsupportedNumbers: ["30"] });
     expect(generate.mock.calls[0][1]).toContain("상담원 메모: 환불돼요?");

@@ -59,6 +59,8 @@ export type Usage = {
   /** 추론(thinking) 토큰 포함. 두 제공사 모두 출력 단가로 과금 */
   outputTokens: number;
   latencyMs: number;
+  /** 기본 모델이 실패해 대체 모델이 답했으면 기본 모델 id */
+  fallbackFrom?: string;
 };
 
 /** 텍스트 목록을 같은 순서의 벡터 목록으로 바꿈 */

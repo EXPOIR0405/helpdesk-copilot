@@ -1,34 +1,35 @@
 // 평가 결과(실제 모델 응답)로 웹 목업 데이터를 만듦. API 키 없이 화면을 볼 수 있게 하는 용도
-// 사용법: npm run mock -- data/logs/eval-<ts>.json
-// OPENAI_API_KEY가 있으면 고객 답장 초안도 실제 모델로 만듦 (.cache/replies.json에 캐시)
+// 사용법: npm run mock -- data/logs/eval-<model>-<ts>.json (생략하면 서비스 모델의 최신 평가)
+// 모델 API 키가 있으면 고객 답장 초안도 실제 모델로 만듦 (.cache/replies.json에 캐시)
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import OpenAI from "openai";
 import { config } from "../src/config.ts";
-import { openAIReplyGenerator } from "../src/core/openai.ts";
 import { createReplyWriter, type CustomerReply } from "../src/core/reply.ts";
 import { buildOps, summarizeEval, type EvalRow } from "../src/core/report.ts";
 import { loadIndex } from "../src/core/sync.ts";
 import type { UnansweredEntry } from "../src/core/unanswered.ts";
+import { createGenerationModel } from "../src/providers.ts";
 
+// 파일 이름 eval-<model>-<ISO 시각>.json → 같은 모델 안에서는 이름순 = 시간순
 const evalPath =
   process.argv[2] ??
   (await readdir("data/logs"))
-    .filter((f) => f.startsWith("eval-"))
+    .filter((f) => f.startsWith(`eval-${config.models.generation}-`) && f.endsWith(".json"))
     .sort()
     .map((f) => `data/logs/${f}`)
     .at(-1);
-if (!evalPath) throw new Error("평가 결과가 없습니다. 먼저 npm run eval 을 실행하세요");
+if (!evalPath) throw new Error(`${config.models.generation} 평가 결과가 없습니다. 먼저 npm run eval 을 실행하세요`);
 
-const rows: EvalRow[] = JSON.parse(await readFile(evalPath, "utf8"));
+// 여러 회차 평가는 EvalRow[][] → 첫 회차를 목업으로 (예전 한 회차 형식도 읽음)
+const parsed: EvalRow[] | EvalRow[][] = JSON.parse(await readFile(evalPath, "utf8"));
+const rows: EvalRow[] = Array.isArray(parsed[0]) ? (parsed as EvalRow[][])[0] : (parsed as EvalRow[]);
 const index = await loadIndex(config.indexPath);
 if (!index) throw new Error("인덱스가 없습니다. 먼저 npm run sync 를 실행하세요");
-
 
 const cachePath = ".cache/replies.json";
 const cache: Record<string, CustomerReply> = await readFile(cachePath, "utf8").then(JSON.parse, () => ({}));
 const cacheKey = (r: EvalRow) => `${r.q.question}\n${r.a.text}`;
 if (process.env.OPENAI_API_KEY) {
-  const writer = createReplyWriter(openAIReplyGenerator(new OpenAI(), config.models.generation));
+  const writer = createReplyWriter(createGenerationModel(config.models.generation, config.calls.eval).reply);
   const todo = rows.filter((r) => !cache[cacheKey(r)]);
   await Promise.all(
     Array.from({ length: 4 }, async () => {

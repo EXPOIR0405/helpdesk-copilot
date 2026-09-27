@@ -18,6 +18,10 @@ function getApi() {
       policyDocs: runtime.policyDocs,
       keepalive: runtime.backend.keepalive,
       limits: config.limits,
+      usage: runtime.backend.usage,
+      alerts: runtime.alerts,
+      generationModel: runtime.models.generation,
+      health: runtime.backend.health,
       cronSecret: process.env.CRON_SECRET,
     }),
   );

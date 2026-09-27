@@ -401,6 +401,8 @@ async function renderOps() {
     ? ops.unanswered.map(renderGroup(ops)).join("")
     : `<p class="muted">아직 기록된 미답변 질문이 없습니다.</p>`;
 
+  renderCost(ops);
+
   const ev = ops.eval;
   const pct = ({ n, d }) => (d ? `${((n / d) * 100).toFixed(1)}%<small>${n}/${d}</small>` : "-");
   $("#quality-sub").textContent = `평가셋 ${ev.total}문항 · 모델 ${ops.models.generation}`;
@@ -421,6 +423,56 @@ async function renderOps() {
       </tr>`,
     )
     .join("");
+}
+
+/** 모델 호출 비용·대체 전환·실패. 목업 데이터에는 없음 */
+function renderCost(ops) {
+  const { models, usage, budget } = ops;
+  $("#cost-sub").textContent = models.fallback ? `기본 ${models.generation} → 대체 ${models.fallback}` : `모델 ${models.generation} · 대체 없음`;
+  if (!usage || !budget) {
+    $("#cost").innerHTML = `<p class="muted">실제 서버에 연결됐을 때만 표시됩니다.</p>`;
+    return;
+  }
+  const ratio = budget.dailyUsd ? budget.spentTodayUsd / budget.dailyUsd : 0;
+  const level = ratio >= 0.8 ? "stop" : ratio >= 0.5 ? "warn" : "ok";
+  const usd = (v) => `$${v < 0.01 && v > 0 ? v.toFixed(4) : v.toFixed(2)}`;
+
+  // 일별 합계 (모델별 행을 날짜로 묶음)
+  const days = new Map();
+  for (const u of usage) {
+    const d = days.get(u.day) ?? { calls: 0, costUsd: 0, fallbacks: 0, failures: 0, p95LatencyMs: 0 };
+    d.calls += u.calls;
+    d.costUsd += u.costUsd;
+    d.fallbacks += u.fallbacks;
+    d.failures += u.failures;
+    d.p95LatencyMs = Math.max(d.p95LatencyMs, u.p95LatencyMs);
+    days.set(u.day, d);
+  }
+  const rows = [...days]
+    .map(
+      ([day, d]) => `<tr>
+        <td class="num">${esc(day.slice(5).replace("-", "."))}</td>
+        <td class="num">${d.calls}</td>
+        <td class="num">${usd(d.costUsd)}</td>
+        <td class="num${d.fallbacks ? " is-warn" : ""}">${d.fallbacks}</td>
+        <td class="num${d.failures ? " is-stop" : ""}">${d.failures}</td>
+        <td class="num">${(d.p95LatencyMs / 1000).toFixed(1)}s</td>
+      </tr>`,
+    )
+    .join("");
+
+  $("#cost").innerHTML = `
+    <div class="meter meter--${level}" role="meter" aria-valuemin="0" aria-valuemax="${budget.dailyUsd}" aria-valuenow="${budget.spentTodayUsd.toFixed(4)}" aria-label="오늘 모델 비용">
+      <div class="meter__row"><span>오늘 비용</span><strong>${usd(budget.spentTodayUsd)} <small>/ 예산 ${usd(budget.dailyUsd)}</small></strong></div>
+      <div class="meter__track"><div class="meter__fill" style="width:${Math.min(100, ratio * 100).toFixed(1)}%"></div></div>
+    </div>
+    ${
+      rows
+        ? `<div class="table-wrap"><table class="table">
+            <thead><tr><th scope="col" class="num">날짜</th><th scope="col" class="num">호출</th><th scope="col" class="num">비용</th><th scope="col" class="num">대체</th><th scope="col" class="num">실패</th><th scope="col" class="num">p95</th></tr></thead>
+            <tbody>${rows}</tbody></table></div>`
+        : `<p class="muted">최근 7일 모델 호출이 없습니다.</p>`
+    }`;
 }
 
 const renderGroup = (ops) => (g) => {
