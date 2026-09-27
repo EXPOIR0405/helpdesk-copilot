@@ -68,6 +68,8 @@ claude mcp add cinewave-helpdesk -- node /절대경로/helpdesk-copilot/src/mcp/
 
 ## 사용 예
 
+- 실제 시연 기록: [mcp-demo.md](mcp-demo.md)
+
 - "환불 정책에서 인앱결제 부분만 보여 줘" → `get_policy_doc(refund, 인앱결제 환불)`
 - "문의함에 오래 기다린 거 있어? 맥락 보고 답장 초안 다듬어 줘" → `list_tickets(escalated)` → `get_ticket` → 초안 수정 → 사용자 확인 → `reply_to_ticket`
 - "오늘 운영 상황 요약해 줘. 어떤 문서를 보강해야 해?" → `get_ops_report`
