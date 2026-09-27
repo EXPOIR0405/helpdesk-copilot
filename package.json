@@ -10,6 +10,7 @@
     "sync": "node --env-file=.env scripts/sync.ts",
     "ask": "node --env-file=.env scripts/ask.ts",
     "eval": "node --env-file=.env scripts/eval.ts",
+    "compare": "node scripts/compare.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "mock": "node --env-file-if-exists=.env scripts/build-mock.ts",
@@ -17,6 +18,7 @@
     "build": "node scripts/build.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.24.0",
     "@supabase/supabase-js": "^2.117.2",
     "openai": "^7.23.0"
   },

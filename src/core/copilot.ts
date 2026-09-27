@@ -64,7 +64,7 @@ export function createCopilot(deps: CopilotDeps) {
         text,
         confidence,
         citations: status === "unanswerable" ? [] : cited.map(toCitation),
-        trace: { topScore, grounding: verdict.grounding, retrieved },
+        trace: { topScore, grounding: verdict.grounding, retrieved, usage: verdict.usage },
       };
       if (status === "unanswerable" || confidence === "low") {
         await record(deps.log, q, answer, hits[0].docId, now());

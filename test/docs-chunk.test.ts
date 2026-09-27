@@ -15,6 +15,13 @@ describe("parseDoc", () => {
     expect(doc.status).toBe("confirmed");
     expect(doc.id).toBe("fallback");
   });
+
+  it("CRLF 줄바꿈도 같은 결과와 같은 원문으로", () => {
+    const lf = md({ id: "ad-plan", title: "광고형 요금제", status: "pending" }, "## 현재 상태\n미정");
+    const crlf = parseDoc(lf.replace(/\n/g, "\r\n"), "x");
+    expect(crlf).toMatchObject({ id: "ad-plan", title: "광고형 요금제", status: "pending" });
+    expect(crlf.raw).toBe(parseDoc(lf, "x").raw);
+  });
 });
 
 describe("chunkDoc", () => {

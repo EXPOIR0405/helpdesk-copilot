@@ -3,6 +3,7 @@ import type { OpsDoc } from "../core/report.ts";
 import type { DocIndex, IndexRepo } from "../core/sync.ts";
 import type { DocStatus, Search } from "../core/types.ts";
 import type { UnansweredEntry, UnansweredLog } from "../core/unanswered.ts";
+import type { UsageLog } from "../core/usage.ts";
 import { questionKey, type AnswerStore, type Quota } from "./stores.ts";
 
 // 스키마: supabase/migrations/0001_init.sql
@@ -180,4 +181,55 @@ export async function supabasePolicyDocs(db: SupabaseClient): Promise<PolicyDocV
 export async function supabaseKeepalive(db: SupabaseClient): Promise<void> {
   must(await db.from("docs").select("id").limit(1), "keepalive 조회");
   must(await db.rpc("cleanup_quota"), "제한 기록 정리");
+  must(await db.rpc("cleanup_usage"), "사용량 기록 정리");
+}
+
+// 스키마: supabase/migrations/0003_usage.sql
+export function supabaseUsageLog(db: SupabaseClient): UsageLog {
+  return {
+    async append(e) {
+      must(
+        await db.from("usage").insert({
+          at: e.at,
+          kind: e.kind,
+          model: e.model,
+          input_tokens: e.inputTokens,
+          cached_input_tokens: e.cachedInputTokens,
+          output_tokens: e.outputTokens,
+          latency_ms: Math.round(e.latencyMs),
+          cost_usd: Number.isFinite(e.costUsd) ? e.costUsd : null,
+          fallback_from: e.fallbackFrom ?? null,
+          error: e.error ?? null,
+        }),
+        "사용량 기록",
+      );
+    },
+    async costSince(since) {
+      return Number(must(await db.rpc("usage_cost_since", { p_since: since.toISOString() }), "비용 합계"));
+    },
+    async daily(days) {
+      const rows = must(await db.rpc("usage_daily", { p_days: days }), "사용량 집계") as {
+        day: string; model: string; calls: number; cost_usd: number; fallbacks: number; failures: number; p95_latency_ms: number;
+      }[];
+      return rows.map((r) => ({
+        day: r.day,
+        model: r.model,
+        calls: Number(r.calls),
+        costUsd: Number(r.cost_usd),
+        fallbacks: Number(r.fallbacks),
+        failures: Number(r.failures),
+        p95LatencyMs: Number(r.p95_latency_ms),
+      }));
+    },
+  };
+}
+
+/** 헬스체크: DB에 닿는지, 검색할 조각이 있는지 */
+export async function supabaseHealth(db: SupabaseClient): Promise<{ chunks: number; syncedAt: string | null }> {
+  const [chunks, meta] = await Promise.all([
+    db.from("chunks").select("id", { count: "exact", head: true }),
+    db.from("meta").select("value").eq("key", "synced_at").maybeSingle(),
+  ]);
+  if (chunks.error) throw new Error(`Supabase 조각 수 조회 실패: ${chunks.error.message}`);
+  return { chunks: chunks.count ?? 0, syncedAt: (must(meta, "메타 조회") as { value: string } | null)?.value ?? null };
 }

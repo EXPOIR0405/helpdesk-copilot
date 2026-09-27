@@ -4,7 +4,10 @@ import type { DocStatus, PolicyDoc } from "./types.ts";
 
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
 
-export function parseDoc(raw: string, fallbackId: string): PolicyDoc {
+export function parseDoc(source: string, fallbackId: string): PolicyDoc {
+  // Windows 체크아웃(CRLF)이면 frontmatter를 못 읽어 준비 중 문서가 확정으로 바뀌고,
+  // 해시도 달라져 전부 다시 임베딩됨 → 줄바꿈부터 맞춤
+  const raw = source.replace(/\r\n?/g, "\n");
   const match = raw.match(FRONTMATTER);
   const meta: Record<string, string> = {};
   if (match) {

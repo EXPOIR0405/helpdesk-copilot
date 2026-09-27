@@ -2,9 +2,22 @@ export const config = {
   docsDir: "data/synthetic/docs",
   indexPath: "data/index/index.json",
   unansweredLogPath: "data/logs/unanswered.jsonl",
+  // 모델 호출 시간 예산. SDK 기본값(OpenAI 10분, Gemini 없음)이면 요청 하나가 서버 함수 시간을 다 씀
+  calls: {
+    // Vercel 함수 30초 안에 기본 모델 + 대체 모델 + 임베딩·DB가 들어가야 함
+    // 같은 제공사 재시도 대신 다른 제공사로 넘기는 것을 재시도로 씀 (장애 중엔 같은 곳에 다시 보내도 대부분 실패)
+    serving: { timeoutMs: 10_000, attempts: 1, baseDelayMs: 500 },
+    // 평가는 시간보다 완주가 중요. Gemini 무료 티어 분당 제한을 넘기면 간격을 넉넉히 두고 재시도
+    eval: { timeoutMs: 30_000, attempts: 4, baseDelayMs: 4_000 },
+  },
   models: {
+    // 임베딩을 바꾸면 전체 재동기화가 필요하고 검색 결과도 달라짐 → 생성 모델 비교 때는 고정
     embedding: "text-embedding-3-small",
-    generation: "gpt-5.4-mini",
+    // 후보와 가격은 src/core/models.ts. GENERATION_MODEL 환경 변수로 배포 없이 교체
+    // 선택 근거: docs/model-selection.md
+    generation: process.env.GENERATION_MODEL || "gemini-3.8-flash",
+    // 기본 모델이 일시 오류로 실패하면 쓸 모델. 다른 제공사를 고를 것. FALLBACK_MODEL을 빈 값으로 두면 대체 없음
+    fallback: process.env.FALLBACK_MODEL ?? "gpt-5.4-mini",
   },
   chunk: {
     maxChars: 700,
@@ -20,6 +33,8 @@ export const config = {
     high: 0.5,
     medium: 0.35,
   },
+  // 같은 알림은 이 시간 안에 한 번만 (서버리스 인스턴스가 여러 개여도 DB로 확인)
+  alertWindowSeconds: 1800,
   // 공개 데모 비용 방어
   limits: {
     questionMaxChars: 300,
@@ -31,6 +46,9 @@ export const config = {
     dailyModelCalls: 300,
     // 같은 질문은 이 시간 동안 저장된 답변 재사용
     answerCacheHours: 24,
+    // 하루 모델 비용 예산(USD). 넘기 전(alertRatio)에 Slack 알림. 차단은 dailyModelCalls가 맡음
+    dailyBudgetUsd: 1,
+    budgetAlertRatio: 0.8,
   },
 } as const;
 

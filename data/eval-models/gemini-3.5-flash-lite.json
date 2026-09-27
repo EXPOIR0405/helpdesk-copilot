@@ -1,0 +1,48 @@
+{
+  "model": "gemini-3.5-flash-lite",
+  "runs": 3,
+  "promptVersion": "c89e765b",
+  "pricesCheckedAt": "2026-09-27",
+  "at": "2026-09-27T12:58:27.845Z",
+  "total": 126,
+  "retrievalHit": {
+    "n": 102,
+    "d": 105
+  },
+  "statusAccuracy": {
+    "n": 120,
+    "d": 126
+  },
+  "wrongAnswer": {
+    "n": 0,
+    "d": 30
+  },
+  "overRefusal": {
+    "n": 6,
+    "d": 96
+  },
+  "worstWrongAnswer": 0,
+  "errors": 0,
+  "usage": {
+    "calls": 126,
+    "inputTokens": 125553,
+    "outputTokens": 9776,
+    "costUsd": 0.06210589999999997,
+    "costPer1kQuestionsUsd": 0.49290396825396804,
+    "latencyP50Ms": 1253,
+    "latencyP95Ms": 1792
+  },
+  "misses": [
+    {
+      "id": "q13",
+      "expected": "answered",
+      "missedRuns": 3
+    },
+    {
+      "id": "q42",
+      "expected": "answered",
+      "missedRuns": 3
+    }
+  ],
+  "unstable": []
+}

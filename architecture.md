@@ -19,16 +19,21 @@ flowchart LR
   end
 
   subgraph Supabase["Supabase (Postgres + pgvector)"]
-    DB[("docs · chunks<br/>answers · unanswered · quota")]
+    DB[("docs · chunks · answers<br/>unanswered · quota · usage")]
   end
 
-  OpenAI["OpenAI<br/>임베딩 · 생성"]
+  OpenAI["OpenAI<br/>임베딩 · 대체 생성(gpt-5.4-mini)"]
+  Gemini["Gemini<br/>생성(3.8 Flash)"]
+  Slack["Slack<br/>운영 알림"]
 
   Docs -- "npm run sync<br/>바뀐 문서만" --> OpenAI
   Docs -- "원문·조각·벡터" --> DB
   Web -- "fetch" --> API
   API -- "검색 · 기록 · 캐시 · 호출 제한" --> DB
-  API -- "질문 임베딩 · 답변 · 답장" --> OpenAI
+  API -- "질문 임베딩" --> OpenAI
+  API -- "답변 · 답장" --> Gemini
+  API -. "Gemini 실패 시" .-> OpenAI
+  API -- "대체 전환 · 500 · 예산 · 헬스체크" --> Slack
   Cron --> API
   Web -. "API를 쓸 수 없으면" .-> Mock["목업 데이터<br/>평가 때의 실제 응답"]
 ```
@@ -45,7 +50,7 @@ sequenceDiagram
   actor A as 상담원
   participant API as /api/ask
   participant DB as Supabase
-  participant AI as OpenAI
+  participant AI as 모델 (Gemini · OpenAI)
 
   A->>API: 고객 문의
   API->>DB: IP별 분당 제한 확인
@@ -237,10 +242,45 @@ erDiagram
 - 원인: 화면이 `/api/docs`와 `/api/ask`를 동시에 보내고, 런타임을 `await` 뒤에 값으로 저장 → 두 요청이 각자 런타임(메모리 저장소 포함)을 만듦
 - 해결: 값이 아니라 Promise를 저장. 초기화가 실패하면 다음 요청에서 다시 시도
 
+### 13. 생성 모델은 설정 한 줄로 교체, 같은 평가셋으로 비교
+
+- 후보·공식 단가는 `src/core/models.ts` 한 곳. `GENERATION_MODEL` 환경 변수로 배포 없이 교체
+- 제공사마다 다른 설정을 맞춤: 구조화 출력(OpenAI `json_schema` strict / Gemini `responseJsonSchema`), 추론량(effort low / thinkingLevel LOW / 2.5는 thinkingBudget), 비추론 모델은 추론 설정을 보내지 않음(400)
+- 임베딩은 고정: 바꾸면 전체 재동기화가 필요하고 검색 결과까지 달라져 생성 모델 차이만 볼 수 없음
+- 평가는 모델마다 3회, 결과에 프롬프트 버전 저장. 선택 과정: [docs/model-selection.md](docs/model-selection.md)
+
+### 14. 대체 모델과 호출 시간 예산
+
+- 기본 `gemini-3.8-flash` → 대체 `gpt-5.4-mini`. 대체는 반드시 다른 제공사 (같은 제공사면 장애·키 문제에 같이 멈춤)
+- 실패 분류
+
+| 실패 | 예 | 처리 |
+|---|---|---|
+| 일시 | 429 · 5xx · 타임아웃 · 네트워크 | 대체 모델 + warn 알림 |
+| 제공사 설정 | 401 · 403 · 404 (키 폐기 · 권한 · 모델 종료) | 대체 모델 + error 알림 (사람이 조치) |
+| 요청 오류 | 400 · 422 | 넘기지 않고 실패 (코드·스키마 버그를 대체 모델이 가리지 않게) |
+
+- 시간 예산: Vercel 함수 30초 = 기본 10초 + 대체 10초 + 임베딩·DB
+  - 서비스 호출은 10초·같은 제공사 재시도 없음. 장애 중엔 같은 곳에 다시 보내도 대부분 실패 → 다른 제공사로 넘기는 게 재시도
+  - 평가는 30초·4회 시도 (완주 우선, Gemini 무료 티어 분당 제한 대응)
+  - 이전 설정은 호출 하나가 최대 90초라 대체 모델까지 갈 수 없었음
+- 사용량 기록의 `fallbackFrom`으로 어느 호출이 대체 모델로 처리됐는지 남김
+
+### 15. 사용량·비용 기록과 알림
+
+- `usage` 테이블(0003): 판단·답장 호출마다 모델 · 토큰 · 비용 · 지연 · 대체 여부 · 실패 오류
+  - 운영 탭: 오늘 비용 / 하루 예산, 최근 7일 일별 호출 · 비용 · 대체 · 실패 · p95
+  - DB 함수 `usage_daily`와 `src/core/usage.ts`의 `summarizeDaily`가 같은 규칙 (UTC 날짜, 미등록 모델 비용 0)
+- 알림 (Slack Incoming Webhook, 없으면 콘솔)
+  - 대체 모델 전환, 요청 처리 실패(500), 헬스체크 실패, 하루 예산 80% 도달
+  - 같은 알림은 30분(예산은 하루)에 한 번: 중복 확인을 호출 제한과 같은 `quota` 테이블로 → 서버리스 인스턴스가 여러 개여도 한 번
+  - 알림·기록은 부가 기능: 실패해도 응답은 그대로. 서버리스라 응답 전에 await로 마침
+- `GET /api/health`: 저장소 연결과 조각 수 확인 (모델은 안 부름, 호출마다 비용). 내부 오류 메시지는 알림으로만, 공개 응답엔 상태만
+
 ## 평가 기록
 
 - 평가셋: `data/synthetic/eval/questions.jsonl` 42문항 (direct 13, paraphrase 12, cross 7, pending 3, unanswerable 7)
-- 모델: 생성 `gpt-5.4-mini`(reasoning effort low), 임베딩 `text-embedding-3-small`
+- 모델: 1~3차 생성 `gpt-5.4-mini`(reasoning effort low), 4차부터 `gemini-3.8-flash`(thinking level low). 임베딩 `text-embedding-3-small`
 - 실행: `npm run eval`
 
 ### 1차 — 초기 임계값 (2026-09-26)
@@ -304,3 +344,24 @@ erDiagram
 - 의미
   - 해시 기반 증분 동기화는 비용 절감만이 아니라 결과 안정성에도 도움: 바뀌지 않은 문서는 다시 임베딩하지 않으므로 순위가 흔들리지 않음
   - 평가 수치는 소수점 차이보다 실패 문항과 잘못된 답변률 추세로 판단
+
+### 4차 — 생성 모델 10개 비교와 q41 프롬프트 수정 (2026-09-27)
+
+- 설정: 검색·임계값은 2차와 같음. 생성 모델만 바꿔 각 3회 실행
+- 기준 평가에서 발견
+  - `gpt-5.4-mini` 재평가가 38/42 · 잘못된 답변 1 → 한 번 실행은 믿을 수 없음, 3회 합산으로 전환
+  - q41 "TV 앱 다운로드 언제 생기나요?"를 10개 중 8개 모델이 답함 → 프롬프트 규칙 3차까지 수정
+  - 호출 126건이 전부 404인 모델이 잘못된 답변률 0%로 보임 → 호출 실패율 20% 초과 평가는 무효 처리
+- 결과 (`gemini-3.8-flash`, 프롬프트 `c89e765b`, 3회 합산)
+
+| 지표 | 값 |
+|---|---|
+| 검색 적중률 (top 5) | 97.1% (102/105) |
+| 상태 정확도 | 95.2% (120/126) |
+| 잘못된 답변률 | 0.0% (0/30) |
+| 과잉 거절률 | 6.3% (6/96) |
+| 질문 1,000건 비용 | $1.09 |
+| 응답 p50 / p95 | 1.7s / 2.6s |
+
+- 남은 실패: q13 · q42 (2차와 같은 검색 단계 문제, 모든 모델 공통)
+- 모델별 전체 결과와 선택 이유: [docs/model-selection.md](docs/model-selection.md)

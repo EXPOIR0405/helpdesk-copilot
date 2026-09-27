@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { buildInput, INSTRUCTIONS, VERDICT_SCHEMA } from "./prompt.ts";
 import type { ReplyGenerator } from "./reply.ts";
-import type { Embedder, Generator, ModelVerdict } from "./types.ts";
+import type { Embedder, Generator, ModelVerdict, Usage } from "./types.ts";
 
 export function openAIEmbedder(client: OpenAI, model: string): Embedder {
   return async (texts) => {
@@ -10,24 +10,42 @@ export function openAIEmbedder(client: OpenAI, model: string): Embedder {
   };
 }
 
-export function openAIGenerator(client: OpenAI, model: string): Generator {
+// 추론 모델만 effort low. 비추론 모델(gpt-4.1·4o)에 보내면 400
+const reasoningFor = (reasoning: boolean) => (reasoning ? { reasoning: { effort: "low" as const } } : {});
+
+type ResponseUsage = { input_tokens?: number; input_tokens_details?: { cached_tokens?: number }; output_tokens?: number } | undefined | null;
+
+function openAIUsage(model: string, u: ResponseUsage, started: number): Usage {
+  return {
+    model,
+    inputTokens: u?.input_tokens ?? 0,
+    cachedInputTokens: u?.input_tokens_details?.cached_tokens ?? 0,
+    // reasoning 토큰은 output_tokens에 이미 포함
+    outputTokens: u?.output_tokens ?? 0,
+    latencyMs: Date.now() - started,
+  };
+}
+
+export function openAIGenerator(client: OpenAI, model: string, opts = { reasoning: true }): Generator {
   return async (question, chunks) => {
+    const started = Date.now();
     const res = await client.responses.create({
       model,
       instructions: INSTRUCTIONS,
       input: buildInput(question, chunks),
-      reasoning: { effort: "low" },
+      ...reasoningFor(opts.reasoning),
       text: {
         format: { type: "json_schema", name: "verdict", strict: true, schema: VERDICT_SCHEMA },
       },
     });
-    return JSON.parse(res.output_text) as ModelVerdict;
+    return { ...(JSON.parse(res.output_text) as ModelVerdict), usage: openAIUsage(model, res.usage, started) };
   };
 }
 
-export function openAIReplyGenerator(client: OpenAI, model: string): ReplyGenerator {
+export function openAIReplyGenerator(client: OpenAI, model: string, opts = { reasoning: true }): ReplyGenerator {
   return async (instructions, input) => {
-    const res = await client.responses.create({ model, instructions, input, reasoning: { effort: "low" } });
-    return res.output_text;
+    const started = Date.now();
+    const res = await client.responses.create({ model, instructions, input, ...reasoningFor(opts.reasoning) });
+    return { text: res.output_text, usage: openAIUsage(model, res.usage, started) };
   };
 }

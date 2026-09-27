@@ -10,6 +10,7 @@
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
 ![Node.js 22](https://img.shields.io/badge/Node.js_22-5fa04e?logo=nodedotjs&logoColor=white)
+![Gemini](https://img.shields.io/badge/Gemini-1a73e8?logo=googlegemini&logoColor=white)
 ![OpenAI](https://img.shields.io/badge/OpenAI-412991?logo=openai&logoColor=white)
 ![Supabase pgvector](https://img.shields.io/badge/Supabase_pgvector-3ecf8e?logo=supabase&logoColor=white)
 ![Vercel](https://img.shields.io/badge/Vercel-000000?logo=vercel&logoColor=white)
@@ -21,10 +22,10 @@
 
 | 잘못된 답변률 | 상태 정확도 | 과잉 거절률 | 검색 적중률 |
 |:---:|:---:|:---:|:---:|
-| **0%** (0/10) | **95.2%** (40/42) | **6.3%** (2/32) | **97.1%** (34/35) |
+| **0%** (0/30) | **95.2%** (120/126) | **6.3%** (6/96) | **97.1%** (102/105) |
 | 답하면 안 되는 질문에 답한 비율 | 확정·준비 중·근거 없음 판정 | 답할 수 있는데 거절한 비율 | 정답 문서가 상위 5개 안에 |
 
-> 평가셋 42문항 기준. 회사·요금·정책·오류 코드는 모두 데모용 가상 데이터이며 실존 서비스와 무관
+> 평가셋 42문항 × 3회 합산, 생성 모델 `gemini-3.8-flash` (모델 10개 비교 후 선택: [docs/model-selection.md](docs/model-selection.md)). 회사·요금·정책·오류 코드는 모두 데모용 가상 데이터이며 실존 서비스와 무관
 
 ---
 
@@ -139,7 +140,9 @@ flowchart LR
   Docs["정책 문서<br/>Markdown"] -- "npm run sync<br/>해시로 바뀐 문서만" --> DB[("Supabase<br/>Postgres + pgvector")]
   Web["Vercel<br/>정적 화면"] --> API["Vercel Functions<br/>/api/*"]
   API --> DB
-  API --> AI["OpenAI<br/>임베딩 · 생성"]
+  API --> G["Gemini 3.8 Flash<br/>판단 · 답장"]
+  API -. "실패 시 대체" .-> O["OpenAI<br/>임베딩 · gpt-5.4-mini"]
+  API -- "대체·500·예산·헬스체크" --> Slack["Slack 알림"]
   Cron["Vercel Cron<br/>하루 1회"] -- "일시정지 방지" --> API
 ```
 
@@ -147,10 +150,15 @@ flowchart LR
   - IP별 분당 20회, IP별 하루 모델 호출 30회, 전체 하루 300회
   - 같은 질문 24시간 캐시, 질문 300자 제한
   - 한도를 넘으면 오류 대신 목업 모드
+- 운영 관리
+  - 기본 모델이 429·5xx·타임아웃·키/모델 종료로 실패하면 다른 제공사 모델로 전환. 400대 요청 오류는 코드 버그일 수 있어 넘기지 않음
+  - 호출 시간 예산: 모델 호출 10초, 기본+대체+임베딩이 Vercel 함수 30초 안에
+  - 호출마다 토큰·비용·지연·대체·실패를 DB에 기록 → 운영 탭에 7일 집계, 하루 예산 80%에 Slack 알림
+  - 같은 알림은 30분에 한 번 (DB로 확인해 서버리스 인스턴스가 여러 개여도 중복 없음), `/api/health`로 외부 가동 시간 모니터링
 - 보안
   - 모든 테이블 RLS를 켜고 정책을 두지 않음, DB 함수는 서버 역할만 실행 가능
   - 답장은 `answerId`로만 요청받아 서버에 저장된 답변만 모델에 들어감
-- 상세: [architecture.md](architecture.md) (다이어그램 5개, 설계 결정 12개, 평가 기록)
+- 상세: [architecture.md](architecture.md) (다이어그램 5개, 설계 결정 15개, 평가 기록)
 
 ## 5. 결과
 
@@ -165,6 +173,10 @@ flowchart LR
 | 2차 | 하한 0.15, 거절은 모델 근거 판단으로 | **0%** | **95.2%** | **6.3%** |
 | 실험 | 질문 재작성 추가 | - | 검색 적중 34 → 33 | 채택 안 함 |
 | 3차 | 로컬 → Supabase pgvector 이전 | 0% | 95.2% | 6.3% |
+| 4차 | 모델 10개 × 3회 비교, q41 프롬프트 규칙 3차 수정, `gemini-3.8-flash` 선택 | **0%** (0/30) | **95.2%** (120/126) | **6.3%** (6/96) |
+
+- 4차부터 3회 실행 합산: 같은 설정도 실행마다 판단이 달라져서 (`gpt-5.4-mini` 재평가에서 잘못된 답변 0 → 1 → 0)
+- 모델 비교 전체 과정과 선택 이유: [docs/model-selection.md](docs/model-selection.md)
 
 - 남은 실패 2건도 원인과 함께 기록
   - "돈 돌려받을 수 있어요?": 구어 표현과 문서 용어("환불")의 어휘 차이
@@ -175,7 +187,7 @@ flowchart LR
 
 ### 테스트
 
-- 단위 테스트 47개 (vitest): 코드 가드, 확신도, 증분 동기화, 답장 숫자 검사, API 제한·캐시·인증
+- 단위 테스트 74개 (vitest): 코드 가드, 확신도, 증분 동기화, 답장 숫자 검사, API 제한·캐시·인증, 대체 모델 전환, 알림 중복 방지, 비용 집계, 헬스체크
 - 단위 테스트는 가짜 임베더로 API 호출 없이, 평가는 실제 모델과 실제 저장소로
 
 ## 6. 배운 것
@@ -184,7 +196,8 @@ flowchart LR
 - **분포가 겹치면 임계값 조정은 실패를 옮길 뿐**: 두 분포를 먼저 그려 보고 판단 주체를 바꿈
 - **그럴듯한 개선도 평가셋 앞에서는 손해일 수 있음**: 질문 재작성은 한 문항을 고치고 다른 문항을 망가뜨림
 - **제한값은 배포해서 직접 써 보고 정함**: 분당 6회로 시작했다가 실제 사용 패턴을 보고 역할별 3단 제한으로
-- 전체 11개: [docs/lessons.md](docs/lessons.md)
+- **실패를 안전한 쪽으로 채점하면 장애가 성과로 보임**: 호출 126건이 전부 404인 모델이 잘못된 답변률 0%로 비교표 1위에 오를 뻔함
+- 전체 16개: [docs/lessons.md](docs/lessons.md)
 
 ---
 
@@ -192,7 +205,7 @@ flowchart LR
 
 ```bash
 npm install
-cp .env.example .env        # OPENAI_API_KEY 입력 (Supabase 값은 비워 두면 로컬 파일로 동작)
+cp .env.example .env        # OPENAI_API_KEY · GEMINI_API_KEY 입력 (Supabase 값은 비워 두면 로컬 파일로 동작)
 npm run sync                # 정책 문서 → 조각 → 임베딩 인덱스
 npm run dev                 # http://localhost:3000
 ```
@@ -203,12 +216,13 @@ npm run dev                 # http://localhost:3000
 | 명령 | 내용 |
 |---|---|
 | `npm run ask -- "질문"` | CLI로 질문 |
-| `npm run eval` | 평가셋 42문항 실행, 지표와 틀린 문항 출력 |
+| `npm run eval -- --model <id> --runs 3` | 평가셋 42문항을 모델별로 여러 회 실행, 지표·틀린 문항·흔들린 문항·비용·지연 출력 |
+| `npm run compare` | 모델별 평가 결과 비교표 |
 | `npm test` | 단위 테스트 |
 | `npm run mock` | 평가 결과로 목업 데이터 생성 |
 | `npm run build` | Vercel Build Output 생성 |
 
-- 배포: Supabase에 `supabase/migrations/*.sql` 실행 → `.env`에 Supabase 값 → `npm run sync` → Vercel 연결 (빌드 명령 `npm run build`, 환경 변수 `OPENAI_API_KEY` · `SUPABASE_URL` · `SUPABASE_SECRET_KEY` · `CRON_SECRET`)
+- 배포: Supabase에 `supabase/migrations/*.sql` 실행 → `.env`에 Supabase 값 → `npm run sync` → Vercel 연결 (빌드 명령 `npm run build`, 환경 변수 `OPENAI_API_KEY` · `GEMINI_API_KEY` · `SUPABASE_URL` · `SUPABASE_SECRET_KEY` · `CRON_SECRET` · `SLACK_WEBHOOK_URL`, 선택 `GENERATION_MODEL` · `FALLBACK_MODEL`)
 
 ## 저장소 구조
 
@@ -226,6 +240,8 @@ docs/                설계 문서, 배운 것, README 이미지
 ## 문서
 
 - [architecture.md](architecture.md): 다이어그램, 설계 결정과 이유, 평가 기록
+- [docs/model-selection.md](docs/model-selection.md): 생성 모델 10개 비교 실험과 선택 이유
+- [docs/backlog.md](docs/backlog.md): 다음 단계 계획
 - [docs/design.md](docs/design.md): 설계 문서 (목표, 가상 회사 설정, 화면 구성, 단계 계획)
 - [docs/lessons.md](docs/lessons.md): 설계·평가·배포하며 배운 것
 

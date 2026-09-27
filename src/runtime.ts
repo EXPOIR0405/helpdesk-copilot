@@ -1,7 +1,8 @@
 import OpenAI from "openai";
 import { config } from "./config.ts";
 import { createCopilot } from "./core/copilot.ts";
-import { openAIEmbedder, openAIGenerator, openAIReplyGenerator } from "./core/openai.ts";
+import { openAIEmbedder } from "./core/openai.ts";
+import { createGenerationModel, type CallProfile } from "./providers.ts";
 import { createReplyWriter } from "./core/reply.ts";
 import { buildOps, type EvalSummary } from "./core/report.ts";
 import { memorySearch } from "./core/retrieve.ts";
@@ -20,7 +21,12 @@ import {
   supabaseQuota,
   supabaseSearch,
   supabaseUnansweredLog,
+  supabaseUsageLog,
+  supabaseHealth,
 } from "./server/supabase.ts";
+import { consoleSink, createAlerter, describeError, slackSink } from "./core/alerts.ts";
+import { withFallback } from "./core/fallback.ts";
+import { memoryUsageLog, type UsageLog } from "./core/usage.ts";
 import evalSummary from "../data/eval-summary.json" with { type: "json" };
 
 type Backend = {
@@ -34,6 +40,9 @@ type Backend = {
   /** 정책 문서 탭용 원문. 검색 인덱스와 같은 동기화 결과에서 읽음 */
   policyDocs(): Promise<PolicyDocView[]>;
   keepalive(): Promise<void>;
+  usage: UsageLog;
+  /** 헬스체크용: 검색할 조각 수와 마지막 동기화 시각. 저장소에 닿지 못하면 던짐 */
+  health(): Promise<{ chunks: number; syncedAt: string | null }>;
 };
 
 /** SUPABASE_URL·SUPABASE_SECRET_KEY가 있으면 Supabase, 없으면 로컬 파일 */
@@ -50,6 +59,8 @@ export function selectBackend(): Backend {
       opsDocs: () => supabaseOpsDocs(db),
       policyDocs: () => supabasePolicyDocs(db),
       keepalive: () => supabaseKeepalive(db),
+      usage: supabaseUsageLog(db),
+      health: () => supabaseHealth(db),
     };
   }
   const indexRepo = fileIndexRepo(config.indexPath);
@@ -81,34 +92,85 @@ export function selectBackend(): Backend {
         .sort((a, b) => a.id.localeCompare(b.id));
     },
     keepalive: async () => {},
+    usage: memoryUsageLog(),
+    async health() {
+      const index = await loadIndex();
+      return { chunks: index.chunks.length, syncedAt: index.syncedAt };
+    },
   };
 }
 
+export type RuntimeOptions = {
+  log?: UnansweredLog;
+  generationModel?: string;
+  /** null이면 대체 모델 없음 (평가는 한 모델만 재야 하므로) */
+  fallbackModel?: string | null;
+  /** 서비스는 Vercel 함수 시간 안에, 평가는 완주 우선 */
+  calls?: CallProfile;
+};
+
 /** 스크립트·API가 공통으로 쓰는 조립 지점 */
-export async function createRuntime(opts: { log?: UnansweredLog } = {}) {
+export async function createRuntime(opts: RuntimeOptions = {}) {
   const backend = selectBackend();
-  const client = new OpenAI();
   const log = opts.log ?? backend.log;
+  const calls = opts.calls ?? config.calls.serving;
+
+  // Slack 주소가 없으면 콘솔로. 중복 방지는 호출 제한과 같은 저장소(DB)로 → 인스턴스가 여러 개여도 한 번만
+  const webhook = process.env.SLACK_WEBHOOK_URL?.trim();
+  const alerts = createAlerter({
+    sink: webhook ? slackSink(webhook, "helpdesk-copilot") : consoleSink,
+    gate: (key, windowSeconds) => backend.quota.take(key, windowSeconds, 1),
+    windowSeconds: config.alertWindowSeconds,
+  });
+
+  const primary = createGenerationModel(opts.generationModel ?? config.models.generation, calls);
+  const fallbackId = opts.fallbackModel === undefined ? config.models.fallback : opts.fallbackModel;
+  const model =
+    fallbackId && fallbackId !== primary.id
+      ? withFallback(primary, createGenerationModel(fallbackId, calls), (e) =>
+          alerts.notify({
+            // 제공사 설정 문제(키·권한·모델 종료)는 기다려도 안 풀리므로 error
+            level: e.failure === "provider" ? "error" : "warn",
+            key: `fallback:${e.from}:${e.failure}`,
+            title:
+              e.failure === "provider"
+                ? `기본 모델 사용 불가 (키·권한·모델 종료 확인) → 대체 모델로 응답 중`
+                : `기본 모델 일시 오류 → 대체 모델로 응답`,
+            detail: { 기본: e.from, 대체: e.to, 단계: e.kind, 오류: describeError(e.error) },
+          }),
+        )
+      : primary;
+  const models = { embedding: config.models.embedding, generation: primary.id, fallback: fallbackId || null };
+
   const copilot = createCopilot({
     search: await backend.search(),
-    embed: openAIEmbedder(client, config.models.embedding),
-    generate: openAIGenerator(client, config.models.generation),
+    embed: openAIEmbedder(new OpenAI({ timeout: calls.timeoutMs, maxRetries: calls.attempts - 1 }), config.models.embedding),
+    generate: model.generate,
     log,
     retrieval: config.retrieval,
     confidence: config.confidence,
   });
-  const replyWriter = createReplyWriter(openAIReplyGenerator(client, config.models.generation));
+  const replyWriter = createReplyWriter(model.reply);
 
   async function ops() {
-    const [{ docs, syncedAt }, entries] = await Promise.all([backend.opsDocs(), backend.log.list()]);
+    const now = new Date();
+    const dayStart = new Date(`${now.toISOString().slice(0, 10)}T00:00:00Z`);
+    const [{ docs, syncedAt }, entries, usage, spentToday] = await Promise.all([
+      backend.opsDocs(),
+      backend.log.list(),
+      backend.usage.daily(7, now),
+      backend.usage.costSince(dayStart),
+    ]);
     return buildOps({
       docs,
       syncedAt,
-      models: config.models,
+      models,
       unansweredEntries: entries,
       eval: evalSummary as EvalSummary,
+      usage,
+      budget: { dailyUsd: config.limits.dailyBudgetUsd, spentTodayUsd: spentToday },
     });
   }
 
-  return { backend, log, copilot, replyWriter, ops, policyDocs: backend.policyDocs };
+  return { backend, log, copilot, replyWriter, ops, policyDocs: backend.policyDocs, alerts, models };
 }
