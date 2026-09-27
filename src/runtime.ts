@@ -93,7 +93,7 @@ export async function createRuntime(opts: { log?: UnansweredLog; generationModel
   const models = { embedding: config.models.embedding, generation: model.id };
   const copilot = createCopilot({
     search: await backend.search(),
-    embed: openAIEmbedder(new OpenAI(), config.models.embedding),
+    embed: openAIEmbedder(new OpenAI({ timeout: config.modelTimeoutMs }), config.models.embedding),
     generate: model.generate,
     log,
     retrieval: config.retrieval,

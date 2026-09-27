@@ -2,7 +2,15 @@ import { readdir, readFile } from "node:fs/promises";
 import type { EvalSummary, UsageStats } from "../src/core/report.ts";
 
 // data/eval-models/*.json(npm run eval -- --model <id> 결과)을 한 표로
-type ModelResult = EvalSummary & { model: string; pricesCheckedAt: string; errors: number; usage: UsageStats };
+type ModelResult = EvalSummary & {
+  model: string;
+  runs: number;
+  pricesCheckedAt: string;
+  worstWrongAnswer: number;
+  errors: number;
+  usage: UsageStats;
+  unstable: { id: string }[];
+};
 
 const dir = "data/eval-models";
 const files = (await readdir(dir).catch(() => [])).filter((f) => f.endsWith(".json"));
@@ -12,21 +20,22 @@ if (!files.length) {
 }
 const rows: ModelResult[] = await Promise.all(files.map(async (f) => JSON.parse(await readFile(`${dir}/${f}`, "utf8"))));
 
-// 지표 우선순위 그대로 정렬: 잘못된 답변 → 상태 정확도 → 비용
+// 지표 우선순위 그대로 정렬: 잘못된 답변(최악 회차 → 합산) → 상태 정확도 → 비용
 const rate = (r: { n: number; d: number }) => (r.d ? r.n / r.d : 0);
 rows.sort(
   (a, b) =>
+    a.worstWrongAnswer - b.worstWrongAnswer ||
     rate(a.wrongAnswer) - rate(b.wrongAnswer) ||
     rate(b.statusAccuracy) - rate(a.statusAccuracy) ||
     a.usage.costPer1kQuestionsUsd - b.usage.costPer1kQuestionsUsd,
 );
 
 const pct = (r: { n: number; d: number }) => `${(rate(r) * 100).toFixed(1)}% (${r.n}/${r.d})`;
-console.log(`| 모델 | 잘못된 답변률 | 상태 정확도 | 과잉 거절률 | 호출 실패 | 질문 1,000건 비용 | 응답 p50 / p95 | 평가일 |`);
-console.log(`|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|`);
+console.log(`| 모델 | 회차 | 잘못된 답변률 | 최악 회차 | 상태 정확도 | 과잉 거절률 | 흔들린 문항 | 호출 실패 | 질문 1,000건 비용 | 응답 p50 / p95 | 평가일 |`);
+console.log(`|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|`);
 for (const r of rows) {
   console.log(
-    `| ${r.model} | ${pct(r.wrongAnswer)} | ${pct(r.statusAccuracy)} | ${pct(r.overRefusal)} | ${r.errors} | $${r.usage.costPer1kQuestionsUsd.toFixed(2)} | ${(r.usage.latencyP50Ms / 1000).toFixed(1)}s / ${(r.usage.latencyP95Ms / 1000).toFixed(1)}s | ${r.at.slice(0, 10)} |`,
+    `| ${r.model} | ${r.runs} | ${pct(r.wrongAnswer)} | ${r.worstWrongAnswer}건 | ${pct(r.statusAccuracy)} | ${pct(r.overRefusal)} | ${r.unstable.length} | ${r.errors} | $${r.usage.costPer1kQuestionsUsd.toFixed(2)} | ${(r.usage.latencyP50Ms / 1000).toFixed(1)}s / ${(r.usage.latencyP95Ms / 1000).toFixed(1)}s | ${r.at.slice(0, 10)} |`,
   );
 }
 console.log(`\n가격 기준일: ${[...new Set(rows.map((r) => r.pricesCheckedAt))].join(", ")} (src/core/models.ts)`);

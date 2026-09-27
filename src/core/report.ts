@@ -37,6 +37,16 @@ export function summarizeEval(rows: EvalRow[], at: Date): EvalSummary {
   };
 }
 
+/** 같은 평가셋을 여러 번 돌렸을 때 회차마다 상태가 달라진 문항. 한 번 실행한 결과만 믿으면 안 되는 곳 */
+export function findUnstable(runs: EvalRow[][]): { id: string; statuses: AnswerStatus[] }[] {
+  const byId = new Map<string, AnswerStatus[]>();
+  for (const run of runs) for (const r of run) byId.set(r.q.id, [...(byId.get(r.q.id) ?? []), r.a.status]);
+  return [...byId]
+    .filter(([, s]) => new Set(s).size > 1)
+    .map(([id, statuses]) => ({ id, statuses }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
 export type UsageStats = {
   calls: number;
   inputTokens: number;

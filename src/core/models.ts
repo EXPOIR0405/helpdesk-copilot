@@ -25,6 +25,11 @@ export const MODELS = {
     price: { input: 0.75, cachedInput: 0.75, output: 3.75 },
     note: "2026-12-31까지 할인가, 2027-01-01 인상 예정",
   },
+  "gemini-2.5-flash": {
+    provider: "gemini",
+    price: { input: 0.3, cachedInput: 0.3, output: 2.5 },
+    note: "종료 예정 세대. 신규 사용자 접근 제한 중 → 운영 기본값으로 쓰려면 교체 계획 필요",
+  },
   "gemini-3.5-flash-lite": { provider: "gemini", price: { input: 0.3, cachedInput: 0.3, output: 2.5 } },
   "gemini-3.1-flash-lite": { provider: "gemini", price: { input: 0.25, cachedInput: 0.25, output: 1.5 } },
 } as const satisfies Record<string, ModelSpec>;

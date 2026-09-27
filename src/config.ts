@@ -2,6 +2,8 @@ export const config = {
   docsDir: "data/synthetic/docs",
   indexPath: "data/index/index.json",
   unansweredLogPath: "data/logs/unanswered.jsonl",
+  // 모델 호출 한 번의 제한 시간. SDK 기본값(OpenAI 10분, Gemini 없음)이면 요청 하나가 서버 함수 시간을 다 씀
+  modelTimeoutMs: 30_000,
   models: {
     // 임베딩을 바꾸면 전체 재동기화가 필요하고 검색 결과도 달라짐 → 생성 모델 비교 때는 고정
     embedding: "text-embedding-3-small",

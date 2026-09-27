@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { costUsd, modelSpec } from "../src/core/models.ts";
-import { summarizeUsage } from "../src/core/report.ts";
+import { findUnstable, summarizeUsage, type EvalRow } from "../src/core/report.ts";
 import { isRetryable, withRetry } from "../src/core/retry.ts";
 import type { Usage } from "../src/core/types.ts";
 
@@ -45,6 +45,18 @@ describe("summarizeUsage", () => {
 
   it("호출이 없으면 0", () => {
     expect(summarizeUsage([], 3)).toMatchObject({ calls: 0, costUsd: 0, latencyP50Ms: 0 });
+  });
+});
+
+describe("findUnstable", () => {
+  it("회차마다 상태가 달라진 문항만", () => {
+    const row = (id: string, status: EvalRow["a"]["status"]) =>
+      ({ q: { id, expected_status: "answered" }, a: { status } }) as EvalRow;
+    const runs = [
+      [row("q1", "answered"), row("q2", "answered")],
+      [row("q1", "answered"), row("q2", "unanswerable")],
+    ];
+    expect(findUnstable(runs)).toEqual([{ id: "q2", statuses: ["answered", "unanswerable"] }]);
   });
 });
 
