@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildReplyInput, createReplyWriter, findUnsupportedNumbers, GREETING, withGreeting, type ReplyGenerator } from "../src/core/reply.ts";
+import { buildReplyInput, createReplyWriter, findOutcomePromises, findUnsupportedNumbers, GREETING, withGreeting, type ReplyGenerator } from "../src/core/reply.ts";
 import type { Answer } from "../src/core/types.ts";
 
 const answer = (over: Partial<Answer> = {}): Answer => ({
@@ -63,7 +63,48 @@ describe("replyWriter", () => {
   it("모델 출력을 다듬고 근거 밖 숫자를 표시", async () => {
     const generate = vi.fn<ReplyGenerator>(async () => ({ text: "  안녕하세요.  \n30일 이내 환불됩니다.  " }));
     const reply = await createReplyWriter(generate).write("환불돼요?", answer());
-    expect(reply).toEqual({ text: `${GREETING}\n30일 이내 환불됩니다.`, unsupportedNumbers: ["30"] });
+    expect(reply).toEqual({ text: `${GREETING}\n30일 이내 환불됩니다.`, unsupportedNumbers: ["30"], outcomePromises: [] });
     expect(generate.mock.calls[0][1]).toContain("상담원 메모: 환불돼요?");
+  });
+});
+
+describe("findOutcomePromises (조치 요청 초안 검사)", () => {
+  const action = (over: Partial<Answer> = {}): Answer => ({ ...answer(), requestType: "action", ...over });
+
+  // 실제로 나온 초안 (npm run eval:drafts, 수정 전)
+  it("결과 단정·처리 약속·진행 중 단정을 잡음", () => {
+    const refund =
+      "안녕하세요. 시네웨이브입니다.\n결제 후 7일 이내이고 시청 이력이 없으시다면 전액 환불이 가능합니다. 인앱결제가 아닌 일반 결제 건이라면 확인 후 환불을 진행해 드리겠습니다.";
+    // "없으시다면 전액 환불이 가능합니다"는 조건 안내라 통과, 문제는 뒤의 처리 약속
+    expect(findOutcomePromises(refund, action())).toEqual(["환불을 진행해 드리겠습니다"]);
+    const inProgress = "안녕하세요. 시네웨이브입니다.\n현재 말씀해 주신 결제 내역을 확인하고 있습니다. 사실 관계를 살펴보고 있습니다.";
+    expect(findOutcomePromises(inProgress, action())).toEqual(["확인하고 있습니다", "살펴보고 있습니다"]);
+  });
+
+  it("근거 없이 '고객센터에서 처리할 수 없다'고 하면 잡고, 근거에 있으면 통과", () => {
+    const cancel = "안녕하세요. 시네웨이브입니다.\n정기결제 해지는 고객센터에서 직접 처리가 어려워 직접 진행해 주셔야 합니다.";
+    expect(findOutcomePromises(cancel, action())).toEqual(["고객센터에서 직접 처리가 어려워"]);
+    const grounded = action({ citations: [{ chunkId: "s#1", docId: "account-security", title: "계정 보안", section: "비밀번호", excerpt: "상담원이 비밀번호를 직접 바꾸거나 알려줄 수 없음" }] });
+    expect(findOutcomePromises("비밀번호는 고객센터에서 직접 변경해 드리기 어렵습니다.", grounded)).toEqual([]);
+  });
+
+  it("정책 조건으로 안내한 문장은 통과, 조건 없이 단정하면 잡음", () => {
+    // 수정 후 실제로 나온 초안
+    const conditional =
+      "안녕하세요. 시네웨이브입니다.\n환불은 결제 후 7일 이내이면서 콘텐츠 시청 이력이 없는 경우에 전액 환불이 가능합니다. 요청해 주신 결제 및 이용 내역을 확인한 뒤 안내해 드리겠습니다.";
+    expect(findOutcomePromises(conditional, action())).toEqual([]);
+    const asserted = "안녕하세요. 시네웨이브입니다.\n시청 이력이 없어 전액 환불이 가능합니다.";
+    expect(findOutcomePromises(asserted, action())).toEqual(["전액 환불이 가능합니다"]);
+  });
+
+  it("결과를 미루는 문장은 통과, 조치 요청이 아니면 검사 안 함", () => {
+    const ok = "안녕하세요. 시네웨이브입니다.\n결제 후 7일 이내이고 시청 이력이 없는 경우 전액 환불 대상입니다. 요청 내용을 확인한 뒤 처리 결과를 안내드리겠습니다.";
+    expect(findOutcomePromises(ok, action())).toEqual([]);
+    expect(findOutcomePromises("전액 환불이 가능합니다.", answer())).toEqual([]);
+  });
+
+  it("조치 요청이면 답장 입력에 요청 유형을 넘김", () => {
+    expect(buildReplyInput("환불해 주세요", action())).toContain("요청 유형: 조치 요청");
+    expect(buildReplyInput("환불 돼요?", answer())).not.toContain("요청 유형");
   });
 });
