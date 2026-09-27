@@ -1,6 +1,7 @@
 {
   "model": "gpt-5.4-nano",
   "runs": 3,
+  "promptVersion": "c89e765b",
   "pricesCheckedAt": "2026-09-27",
   "at": "2026-09-27T12:59:50.640Z",
   "total": 126,

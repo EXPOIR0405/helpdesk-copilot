@@ -405,7 +405,9 @@ async function renderOps() {
 
   const ev = ops.eval;
   const pct = ({ n, d }) => (d ? `${((n / d) * 100).toFixed(1)}%<small>${n}/${d}</small>` : "-");
-  $("#quality-sub").textContent = `평가셋 ${ev.total}문항 · 모델 ${ops.models.generation}`;
+  // 여러 회차 평가면 합산 비율 (total = 문항 수 × 회차)
+  const runs = ev.runs ?? 1;
+  $("#quality-sub").textContent = `평가셋 ${ev.total / runs}문항${runs > 1 ? ` × ${runs}회 합산` : ""} · 모델 ${ev.model ?? ops.models.generation}`;
   $("#quality").innerHTML = `
     <div class="q q--key"><dt>잘못된 답변률</dt><dd>${pct(ev.wrongAnswer)}</dd></div>
     <div class="q"><dt>상태 정확도</dt><dd>${pct(ev.statusAccuracy)}</dd></div>

@@ -1,6 +1,7 @@
 {
   "model": "gemini-3.5-flash-lite",
   "runs": 3,
+  "promptVersion": "c89e765b",
   "pricesCheckedAt": "2026-09-27",
   "at": "2026-09-27T12:58:27.845Z",
   "total": 126,

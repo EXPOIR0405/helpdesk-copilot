@@ -5,6 +5,7 @@ import type { EvalSummary, UsageStats } from "../src/core/report.ts";
 type ModelResult = EvalSummary & {
   model: string;
   runs: number;
+  promptVersion?: string;
   pricesCheckedAt: string;
   worstWrongAnswer: number;
   errors: number;
@@ -33,11 +34,11 @@ rows.sort(
 );
 
 const pct = (r: { n: number; d: number }) => `${(rate(r) * 100).toFixed(1)}% (${r.n}/${r.d})`;
-console.log(`| 모델 | 회차 | 잘못된 답변률 | 최악 회차 | 상태 정확도 | 과잉 거절률 | 흔들린 문항 | 호출 실패 | 질문 1,000건 비용 | 응답 p50 / p95 | 평가일 |`);
-console.log(`|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|`);
+console.log(`| 모델 | 프롬프트 | 회차 | 잘못된 답변률 | 최악 회차 | 상태 정확도 | 과잉 거절률 | 흔들린 문항 | 호출 실패 | 질문 1,000건 비용 | 응답 p50 / p95 | 평가일 |`);
+console.log(`|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|`);
 for (const r of rows) {
   console.log(
-    `| ${r.errors ? "⚠ " : ""}${r.model} | ${r.runs} | ${pct(r.wrongAnswer)} | ${r.worstWrongAnswer}건 | ${pct(r.statusAccuracy)} | ${pct(r.overRefusal)} | ${r.unstable.length} | ${r.errors} | $${r.usage.costPer1kQuestionsUsd.toFixed(2)} | ${(r.usage.latencyP50Ms / 1000).toFixed(1)}s / ${(r.usage.latencyP95Ms / 1000).toFixed(1)}s | ${r.at.slice(0, 10)} |`,
+    `| ${r.errors ? "⚠ " : ""}${r.model} | ${r.promptVersion ?? "-"} | ${r.runs} | ${pct(r.wrongAnswer)} | ${r.worstWrongAnswer}건 | ${pct(r.statusAccuracy)} | ${pct(r.overRefusal)} | ${r.unstable.length} | ${r.errors} | $${r.usage.costPer1kQuestionsUsd.toFixed(2)} | ${(r.usage.latencyP50Ms / 1000).toFixed(1)}s / ${(r.usage.latencyP95Ms / 1000).toFixed(1)}s | ${r.at.slice(0, 10)} |`,
   );
 }
 console.log(`\n가격 기준일: ${[...new Set(rows.map((r) => r.pricesCheckedAt))].join(", ")} (src/core/models.ts)`);

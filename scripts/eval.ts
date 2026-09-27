@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import { config } from "../src/config.ts";
 import { PRICES_CHECKED_AT, modelSpec } from "../src/core/models.ts";
+import { INSTRUCTIONS } from "../src/core/prompt.ts";
 import { findUnstable, summarizeEval, summarizeUsage, type EvalRow } from "../src/core/report.ts";
 import type { Answer, Usage } from "../src/core/types.ts";
 import { memoryUnansweredLog } from "../src/core/unanswered.ts";
@@ -18,6 +20,8 @@ const { values: args } = parseArgs({
 });
 const model = modelSpec(args.model).id;
 const runCount = Number(args.runs);
+// 판단 프롬프트 버전. 프롬프트가 다른 결과끼리 비교표에서 섞이지 않게
+const promptVersion = createHash("sha256").update(INSTRUCTIONS).digest("hex").slice(0, 8);
 
 type EvalQuestion = EvalRow["q"] & { note: string };
 
@@ -83,7 +87,7 @@ const usage = summarizeUsage(
 );
 const unstable = findUnstable(runs);
 
-console.log(`\n모델: ${model} / ${config.models.embedding}, ${runCount}회 실행`);
+console.log(`\n모델: ${model} / ${config.models.embedding}, ${runs.length}회 실행, 프롬프트 ${promptVersion}`);
 console.log(`임계값: minScore ${config.retrieval.minScore}, high ${config.confidence.high}, medium ${config.confidence.medium}\n`);
 console.log(`| 지표 (${runCount}회 합산) | 값 |\n|---|---|`);
 console.log(`| 검색 적중률 (top ${config.retrieval.topK}) | ${pct(summary.retrievalHit.n, summary.retrievalHit.d)} |`);
@@ -144,11 +148,11 @@ const modelOut = `data/eval-models/${model}.json`;
 const misses = [...missCount].map(([id, m]) => ({ id, expected: m.q.expected_status, missedRuns: m.actual.length }));
 await writeFile(
   modelOut,
-  JSON.stringify({ model, runs: runs.length, pricesCheckedAt: PRICES_CHECKED_AT, ...summary, worstWrongAnswer, errors: errors.length, usage, misses, unstable }, null, 2) + "\n",
+  JSON.stringify({ model, runs: runs.length, promptVersion, pricesCheckedAt: PRICES_CHECKED_AT, ...summary, worstWrongAnswer, errors: errors.length, usage, misses, unstable }, null, 2) + "\n",
 );
 
 // 운영 화면 품질 지표는 실제 서비스 모델의 결과만
 if (model === config.models.generation) {
-  await writeFile("data/eval-summary.json", JSON.stringify(summary, null, 2) + "\n");
+  await writeFile("data/eval-summary.json", JSON.stringify({ model, runs: runs.length, promptVersion, ...summary }, null, 2) + "\n");
 }
 console.log(`\n상세 결과: ${out}\n모델 요약: ${modelOut}`);

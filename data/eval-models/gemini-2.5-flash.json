@@ -1,6 +1,7 @@
 {
   "model": "gemini-2.5-flash",
   "runs": 3,
+  "promptVersion": "da2331be",
   "pricesCheckedAt": "2026-09-27",
   "at": "2026-09-27T12:40:55.404Z",
   "total": 126,

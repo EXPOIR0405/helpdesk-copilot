@@ -1,20 +1,23 @@
 {
-  "at": "2026-09-25T17:30:28.804Z",
-  "total": 42,
+  "model": "gemini-3.8-flash",
+  "runs": 3,
+  "promptVersion": "c89e765b",
+  "at": "2026-09-27T13:00:43.167Z",
+  "total": 126,
   "retrievalHit": {
-    "n": 34,
-    "d": 35
+    "n": 102,
+    "d": 105
   },
   "statusAccuracy": {
-    "n": 40,
-    "d": 42
+    "n": 120,
+    "d": 126
   },
   "wrongAnswer": {
     "n": 0,
-    "d": 10
+    "d": 30
   },
   "overRefusal": {
-    "n": 2,
-    "d": 32
+    "n": 6,
+    "d": 96
   }
 }

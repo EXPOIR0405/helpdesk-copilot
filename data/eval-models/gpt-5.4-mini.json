@@ -1,6 +1,7 @@
 {
   "model": "gpt-5.4-mini",
   "runs": 3,
+  "promptVersion": "c89e765b",
   "pricesCheckedAt": "2026-09-27",
   "at": "2026-09-27T13:00:54.161Z",
   "total": 126,

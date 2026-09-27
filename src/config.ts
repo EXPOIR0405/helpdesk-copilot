@@ -14,9 +14,10 @@ export const config = {
     // 임베딩을 바꾸면 전체 재동기화가 필요하고 검색 결과도 달라짐 → 생성 모델 비교 때는 고정
     embedding: "text-embedding-3-small",
     // 후보와 가격은 src/core/models.ts. GENERATION_MODEL 환경 변수로 배포 없이 교체
-    generation: process.env.GENERATION_MODEL || "gpt-5.4-mini",
-    // 기본 모델이 일시 오류로 실패하면 쓸 모델. 다른 제공사를 고를 것. 비우면 대체 없음
-    fallback: process.env.FALLBACK_MODEL || "",
+    // 선택 근거: docs/model-selection.md
+    generation: process.env.GENERATION_MODEL || "gemini-3.8-flash",
+    // 기본 모델이 일시 오류로 실패하면 쓸 모델. 다른 제공사를 고를 것. FALLBACK_MODEL을 빈 값으로 두면 대체 없음
+    fallback: process.env.FALLBACK_MODEL ?? "gpt-5.4-mini",
   },
   chunk: {
     maxChars: 700,

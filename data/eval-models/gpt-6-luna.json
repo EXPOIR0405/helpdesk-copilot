@@ -1,6 +1,7 @@
 {
   "model": "gpt-6-luna",
   "runs": 3,
+  "promptVersion": "c89e765b",
   "pricesCheckedAt": "2026-09-27",
   "at": "2026-09-27T13:02:00.589Z",
   "total": 126,
