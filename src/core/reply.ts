@@ -7,6 +7,8 @@ export type CustomerReply = {
   text: string;
   /** 근거에 없는 숫자. 있으면 상담원이 보내기 전에 확인해야 함 */
   unsupportedNumbers: string[];
+  /** 조치 요청인데 결과를 단정·약속한 구절. 있으면 상담원이 보내기 전에 고쳐야 함 (이전 기록에는 없음) */
+  outcomePromises?: string[];
   /** 모델 호출 기록 (비용 집계용) */
   usage?: Usage;
 };
@@ -26,6 +28,12 @@ export const REPLY_INSTRUCTIONS = `당신은 OTT 서비스 시네웨이브 고�
    - 확정: 고객이 알아야 할 결론을 먼저 말하고, 고객이 할 일이 있으면 순서대로 안내합니다.
    - 준비 중: 아직 확정되지 않았고 확정되면 공지로 안내된다는 점만 전합니다. 가격·출시 시기·사전 신청을 언급하거나 추측하지 않습니다.
    - 근거 없음: 답을 지어내지 않습니다. 문의 내용을 확인한 뒤 다시 안내드리겠다는 보류 답장을 씁니다. 다시 안내할 시점은 약속하지 않습니다.
+   - 요청 유형이 "조치 요청"이면(고객이 계정·결제에 처리를 요청): 상담원이 확인한 뒤 처리할 건입니다.
+     정책 기준은 "~인 경우 ~"처럼 조건으로만 안내하고, 이 고객에게 적용된 결과(환불 가능·완료, 해지·변경 완료)를 단정하거나 처리를 약속하지 않습니다.
+     고객이 말한 사실("안 봤어요", "두 번 결제됐어요")을 확인된 사실로 쓰지 않습니다.
+     고객센터가 처리할 수 있는지 없는지는 근거에 적혀 있을 때만 씁니다.
+     아직 하지 않은 확인을 "확인하고 있습니다"처럼 진행 중이라고 쓰지 않습니다.
+     고객이 직접 할 수 있는 방법이 근거에 있으면 선택지로 안내하고, 요청 내용을 확인한 뒤 안내드리겠다고 맺습니다.
 
 표현 규칙
 4. 고객 관점으로 바꿉니다. 문서 이름, 조각 번호, "근거", "정책 문서", "상담원" 같은 내부 표현은 쓰지 않습니다.
@@ -48,6 +56,8 @@ export function buildReplyInput(question: string, answer: Answer): string {
   return [
     `상담원 메모: ${question}`,
     `상태: ${STATUS_LABEL[answer.status]}`,
+    // 판단 단계는 조치 요청인지 알지만 답장 단계는 몰라서, 고객 말("안 봤어요")을 사실로 받아 결과를 단정했음
+    ...(answer.requestType === "action" ? ["요청 유형: 조치 요청 (상담원이 확인 후 처리)"] : []),
     `확인된 답변:\n${answer.text}`,
     `근거:\n${sources || "(없음)"}`,
   ].join("\n\n");
@@ -66,6 +76,43 @@ export function findUnsupportedNumbers(reply: string, answer: Answer): string[] 
   return [...new Set(found.filter((n) => !known.has(normalize(n))))];
 }
 
+// 고객 계정에 적용된 결과를 단정·약속하는 표현. 조치 요청은 상담원이 확인 후 처리하므로 초안이 결과를 먼저 말하면 안 됨
+// "확인 후 처리 결과를 안내드리겠습니다"처럼 결과를 미루는 문장은 걸리지 않게 동사까지 봄
+const OUTCOME_PROMISE = [
+  // 결과 단정: "전액 환불이 가능합니다"
+  /(?:전액\s*)?(?:환불|해지|취소|변경|초기화|재설정)(?:이|가|은|는)?\s*(?:가능합니다|가능하십니다|됩니다|되었습니다|완료되었습니다|완료됩니다)/g,
+  // 처리 약속: "환불해 드리겠습니다", "환불을 진행해 드리겠습니다"
+  /(?:환불|해지|취소|변경|초기화|재설정|처리)(?:을|를)?\s*(?:진행\s*)?(?:해|하여)\s*드리겠습니다/g,
+  /(?:환불|해지|취소|변경|처리)(?:을|를)?\s*(?:해\s*)?드렸습니다/g,
+  // 하지 않은 확인을 진행 중이라고: "확인하고 있습니다"
+  /(?:확인|조회|검토)(?:하고\s*있습니다|\s*중입니다)|살펴보고\s*있습니다/g,
+];
+
+// "고객센터에서 (직접) 처리하기 어렵습니다" — 근거에 없으면 지어낸 안내 (해지·카드 변경 초안에서 실제로 나옴)
+const CANNOT_PROCESS = /(?:고객센터|저희)에서\s*(?:직접\s*)?[가-힣\s]{0,12}?(?:어려|불가|할\s*수\s*없)[가-힣]*/g;
+const CANNOT_PROCESS_SOURCE = /(?:상담원|고객센터)[가-힣\s]{0,20}(?:없음|불가|할\s*수\s*없)/;
+
+/**
+ * 조치 요청 초안에서 결과를 단정·약속하거나, 근거 없이 "처리할 수 없다"고 한 구절
+ * 조치 요청이 아니면 검사하지 않음. 경고용: 초안을 막지 않고 상담원에게 보여 줌
+ */
+export function findOutcomePromises(reply: string, answer: Answer): string[] {
+  if (answer.requestType !== "action") return [];
+  const [asserted, ...rest] = OUTCOME_PROMISE;
+  const hits = rest.flatMap((re) => reply.match(re) ?? []);
+  // "7일 이내이고 시청 이력이 없는 경우 전액 환불이 가능합니다"는 정책 조건 안내 → 통과
+  // 같은 문장 앞쪽에 조건("경우", "~면")이 없을 때만 이 고객에게 결과를 단정한 것으로 봄
+  for (const sentence of reply.split(/(?<=[.!?])\s+|\n/)) {
+    for (const m of sentence.matchAll(asserted)) {
+      const before = sentence.slice(0, m.index);
+      if (!/경우|[가-힣]면\s/.test(before)) hits.push(m[0]);
+    }
+  }
+  const sources = [answer.text, ...answer.citations.map((c) => c.excerpt)].join("\n");
+  if (!CANNOT_PROCESS_SOURCE.test(sources)) hits.push(...(reply.match(CANNOT_PROCESS) ?? []));
+  return [...new Set(hits.map((h) => h.trim()))];
+}
+
 /** 첫 줄을 인사말로 맞춤. 모델이 쓴 인사("안녕하세요, 고객님", "시네웨이브입니다")는 걷어 내고 고정 인사말로 */
 export function withGreeting(text: string): string {
   const rest = text
@@ -81,7 +128,7 @@ export function createReplyWriter(generate: ReplyGenerator) {
     async write(question: string, answer: Answer): Promise<CustomerReply> {
       const { text: raw, usage } = await generate(REPLY_INSTRUCTIONS, buildReplyInput(question, answer));
       const text = withGreeting(raw.replace(/[ \t]+$/gm, "").trim());
-      return { text, unsupportedNumbers: findUnsupportedNumbers(text, answer), usage };
+      return { text, unsupportedNumbers: findUnsupportedNumbers(text, answer), outcomePromises: findOutcomePromises(text, answer), usage };
     },
   };
 }

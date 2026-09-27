@@ -237,9 +237,14 @@ async function loadTicket(id) {
 
   let action = "";
   if (t.status === "escalated") {
-    const warn = t.draft?.unsupportedNumbers?.length
-      ? `<p class="reply__warn">${icon(ICON.alert)} 근거에 없는 숫자: ${t.draft.unsupportedNumbers.map(esc).join(", ")}</p>`
-      : "";
+    const warn =
+      (t.draft?.unsupportedNumbers?.length
+        ? `<p class="reply__warn">${icon(ICON.alert)} 근거에 없는 숫자: ${t.draft.unsupportedNumbers.map(esc).join(", ")}</p>`
+        : "") +
+      // 조치 요청인데 확인 전에 결과를 단정·약속했거나, 근거 없이 "처리할 수 없다"고 한 구절
+      (t.draft?.outcomePromises?.length
+        ? `<p class="reply__warn">${icon(ICON.alert)} 확인 전에 결과를 약속하거나 근거 없이 단정한 표현: ${t.draft.outcomePromises.map((s) => `"${esc(s)}"`).join(", ")}</p>`
+        : "");
     action = `<section class="td__sec"><h3>답장</h3>
       <form id="td-reply">
         <textarea id="td-text" rows="7" maxlength="2000">${esc(t.draft?.text ?? "안녕하세요. 시네웨이브입니다.\n")}</textarea>

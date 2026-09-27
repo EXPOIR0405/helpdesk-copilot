@@ -12,6 +12,7 @@
     "eval": "node --env-file=.env scripts/eval.ts",
     "compare": "node scripts/compare.ts",
     "eval:triage": "node --env-file=.env scripts/eval-triage.ts",
+    "eval:drafts": "node --env-file=.env scripts/eval-drafts.ts",
     "mcp": "node src/mcp/stdio.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
