@@ -24,8 +24,8 @@
 - [x] 기본 모델 실패 시 다른 제공사 모델로 전환 (fallback), 전환 횟수 기록
 - [x] 장애·비용 이상 시 **Slack** 알림 (대체 전환, 500, 하루 예산 80%, 헬스체크 실패)
 - [x] 헬스체크 엔드포인트 `/api/health`
-- [ ] Slack Webhook 연결 후 실제 알림 확인
-- [ ] Supabase에 `0003_usage.sql` 적용, Vercel 환경 변수 추가 후 배포
+- [x] Slack Webhook 연결 후 실제 알림 확인
+- [x] Supabase에 `0003_usage.sql` 적용, Vercel 환경 변수 추가 후 배포
 - [ ] 외부 가동 시간 모니터(UptimeRobot 등)에 `/api/health` 등록
 
 ### 4단계 — 자동 응대 에이전트 (n8n + webhook)
@@ -37,7 +37,7 @@
 - [x] 개인정보 가림(이메일·전화·카드·주민번호), 모델 실패해도 접수 유지
 - [x] 자동 응대 평가 22문항 (잘못된 자동 발송 0/33), 기존 42문항 회귀 확인
 - [x] n8n 워크플로우 2개(넘김 알림 · SLA 알림) 로컬에서 끝까지 확인, n8n 실패 시 Slack 직접
-- [ ] Supabase에 `0004_tickets.sql` 적용 후 배포
+- [x] Supabase에 `0004_tickets.sql` 적용 후 배포
 - [ ] n8n 클라우드 이전 (무료 VM), Vercel에 `N8N_WEBHOOK_URL` · `HELPDESK_N8N_SECRET`
 - [ ] 자동 처리율 개선 실험: 저확신 기준(검색 유사도 0.5)을 고객 말투에 맞게 조정할지 평가셋으로 검증
 - [ ] 사후 검수에서 "틀림"으로 표시한 자동 응답을 평가셋 후보로 내보내는 스크립트
@@ -51,7 +51,7 @@
 - [x] MCP 도구 8개 + 정책 문서 리소스 ([mcp.md](mcp.md)), 로컬 stdio · 원격 `/api/mcp`
 - [x] 실제 stdio 서버로 공개 데모 API 연결 확인
 - [x] Claude Code 헤드리스로 시연, 기록 → [mcp-demo.md](mcp-demo.md)
-- [ ] Claude.ai 커넥터 화면 캡처
+- [x] Claude.ai 커넥터 화면 캡처 → [mcp.md](mcp.md#원격-streamable-http)
 
 ### 상시 — 운영 기록
 

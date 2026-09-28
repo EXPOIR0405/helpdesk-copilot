@@ -50,8 +50,20 @@ claude mcp add cinewave-helpdesk -- node /절대경로/helpdesk-copilot/src/mcp/
 ### 원격 (Streamable HTTP)
 
 - 주소: `https://helpdesk-copilot.vercel.app/api/mcp`
-- Claude.ai → 설정 → 커넥터 → 커스텀 커넥터 추가에 이 주소
+- Claude.ai → 설정 → 사용자 지정 → 커넥터 → 추가 → 커스텀 커넥터 추가에 이 주소
+  - 인증은 "로그인 없음"으로 자동 감지됨
 - 무상태(세션 없음), JSON 응답. 인증 없음 — 공개 데모 화면과 같은 범위의 기능·데이터
+
+<table>
+<tr>
+<td width="45%"><img src="assets/mcp-claude-ai-connector.png" alt="Claude.ai 커스텀 커넥터 — 도구 권한 목록"></td>
+<td width="55%"><img src="assets/mcp-claude-ai-chat.png" alt="Claude.ai 대화에서 ask_policy·list_tickets 호출"></td>
+</tr>
+<tr>
+<td><sub>커넥터 연결 후 도구 목록 (기본값 승인 필요)</sub></td>
+<td><sub>정책 질문 + 문의함 목록을 한 질문에서 호출</sub></td>
+</tr>
+</table>
 
 ## 설계
 
